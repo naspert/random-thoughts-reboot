@@ -1,1 +1,1 @@
-Sitemap: https://naspert.github.io/random-thoughts-reboot/sitemap.xml
+Sitemap: https://dev.clockworkpanda.xyz/sitemap.xml
