@@ -1,0 +1,2669 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="twitter:card" content="summary_large_image" /><!-- Begin Jekyll SEO tag v2.7.1 -->
+<title>Pre-processing wikipedia dumps with dask (part 2) | fastpages</title>
+<meta name="generator" content="Jekyll v4.1.1" />
+<meta property="og:title" content="Pre-processing wikipedia dumps with dask (part 2)" />
+<meta name="author" content="Nicolas Aspert" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="Part 1 showed how to convert the SQL into dataframes. Further processing those dataframes into usable data." />
+<meta property="og:description" content="Part 1 showed how to convert the SQL into dataframes. Further processing those dataframes into usable data." />
+<link rel="canonical" href="https://naspert.github.io/random-thoughts-reboot/wikipedia/dask/2020/12/04/daskwiki-part2.html" />
+<meta property="og:url" content="https://naspert.github.io/random-thoughts-reboot/wikipedia/dask/2020/12/04/daskwiki-part2.html" />
+<meta property="og:site_name" content="fastpages" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2020-12-04T00:00:00-06:00" />
+<meta name="twitter:card" content="summary" />
+<meta property="twitter:title" content="Pre-processing wikipedia dumps with dask (part 2)" />
+<script type="application/ld+json">
+{"url":"https://naspert.github.io/random-thoughts-reboot/wikipedia/dask/2020/12/04/daskwiki-part2.html","@type":"BlogPosting","headline":"Pre-processing wikipedia dumps with dask (part 2)","dateModified":"2020-12-04T00:00:00-06:00","datePublished":"2020-12-04T00:00:00-06:00","mainEntityOfPage":{"@type":"WebPage","@id":"https://naspert.github.io/random-thoughts-reboot/wikipedia/dask/2020/12/04/daskwiki-part2.html"},"author":{"@type":"Person","name":"Nicolas Aspert"},"description":"Part 1 showed how to convert the SQL into dataframes. Further processing those dataframes into usable data.","@context":"https://schema.org"}</script>
+<!-- End Jekyll SEO tag -->
+<link rel="stylesheet" href="/random-thoughts-reboot/assets/css/style.css"><link type="application/atom+xml" rel="alternate" href="https://naspert.github.io/random-thoughts-reboot/feed.xml" title="fastpages" /><link rel="shortcut icon" type="image/x-icon" href="/random-thoughts-reboot/images/favicon.ico"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/Primer/15.2.0/primer.css" integrity="sha512-xTz2ys4coGAOz8vuV1NcQBkgVmKhsSEtjbqyMJbBHRplFuvKIUo6xhLHpAyPt9mfR6twHJgn9OgVLuqOvjeBhg==" crossorigin="anonymous" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.14.0/css/all.min.css" integrity="sha512-1PKOgIY59xJ8Co8+NE6FZ+LOAZKjy+KY8iq0G4B3CyeY6wYHN3yt9PW0XpSriVlkMXe40PTKnXrLnZ9+fkDaog==" crossorigin="anonymous" />
+
+<script>
+function wrap_img(fn) {
+    if (document.attachEvent ? document.readyState === "complete" : document.readyState !== "loading") {
+        var elements = document.querySelectorAll(".post img");
+        Array.prototype.forEach.call(elements, function(el, i) {
+            if (el.getAttribute("title") && (el.className != "emoji")) {
+                const caption = document.createElement('figcaption');
+                var node = document.createTextNode(el.getAttribute("title"));
+                caption.appendChild(node);
+                const wrapper = document.createElement('figure');
+                wrapper.className = 'image';
+                el.parentNode.insertBefore(wrapper, el);
+                el.parentNode.removeChild(el);
+                wrapper.appendChild(el);
+                wrapper.appendChild(caption);
+            }
+        });
+    } else { document.addEventListener('DOMContentLoaded', fn); }
+}
+window.onload = wrap_img;
+</script>
+
+<script>
+    document.addEventListener("DOMContentLoaded", function(){
+    // add link icon to anchor tags
+    var elem = document.querySelectorAll(".anchor-link")
+    elem.forEach(e => (e.innerHTML = '<i class="fas fa-link fa-xs"></i>'));
+    });
+</script>
+</head>
+<body><header class="site-header">
+
+  <div class="wrapper"><a class="site-title" rel="author" href="/random-thoughts-reboot/">fastpages</a><nav class="site-nav">
+        <input type="checkbox" id="nav-trigger" class="nav-trigger" />
+        <label for="nav-trigger">
+          <span class="menu-icon">
+            <svg viewBox="0 0 18 15" width="18px" height="15px">
+              <path d="M18,1.484c0,0.82-0.665,1.484-1.484,1.484H1.484C0.665,2.969,0,2.304,0,1.484l0,0C0,0.665,0.665,0,1.484,0 h15.032C17.335,0,18,0.665,18,1.484L18,1.484z M18,7.516C18,8.335,17.335,9,16.516,9H1.484C0.665,9,0,8.335,0,7.516l0,0 c0-0.82,0.665-1.484,1.484-1.484h15.032C17.335,6.031,18,6.696,18,7.516L18,7.516z M18,13.516C18,14.335,17.335,15,16.516,15H1.484 C0.665,15,0,14.335,0,13.516l0,0c0-0.82,0.665-1.483,1.484-1.483h15.032C17.335,12.031,18,12.695,18,13.516L18,13.516z"/>
+            </svg>
+          </span>
+        </label>
+
+        <div class="trigger"><a class="page-link" href="/random-thoughts-reboot/about/">About Me</a><a class="page-link" href="/random-thoughts-reboot/search/">Search</a><a class="page-link" href="/random-thoughts-reboot/categories/">Tags</a></div>
+      </nav></div>
+</header>
+<main class="page-content" aria-label="Content">
+      <div class="wrapper">
+        <article class="post h-entry" itemscope itemtype="http://schema.org/BlogPosting">
+
+  <header class="post-header">
+    <h1 class="post-title p-name" itemprop="name headline">Pre-processing wikipedia dumps with dask (part 2)</h1><p class="page-description">Part 1 showed how to convert the SQL into dataframes. Further processing those dataframes into usable data.</p><p class="post-meta post-meta-title"><time class="dt-published" datetime="2020-12-04T00:00:00-06:00" itemprop="datePublished">
+        Dec 4, 2020
+      </time>• 
+          <span itemprop="author" itemscope itemtype="http://schema.org/Person">
+            <span class="p-author h-card" itemprop="name">Nicolas Aspert</span></span>
+       • <span class="read-time" title="Estimated read time">
+    
+    
+      9 min read
+    
+</span></p>
+
+    
+      <p class="category-tags"><i class="fas fa-tags category-tags-icon"></i></i> 
+      
+        <a class="category-tags-link" href="/random-thoughts-reboot/categories/#wikipedia">wikipedia</a>
+        &nbsp;
+      
+        <a class="category-tags-link" href="/random-thoughts-reboot/categories/#dask">dask</a>
+        
+      
+      </p>
+    
+
+    
+      
+        <div class="pb-5 d-flex flex-justify-center">
+          <div class="px-2">
+
+    <a href="https://github.com/naspert/random-thoughts-reboot/tree/master/_notebooks/2020-12-04-daskwiki-part2.ipynb" role="button" target="_blank">
+<img class="notebook-badge-image" src="/random-thoughts-reboot/assets/badges/github.svg" alt="View On GitHub">
+    </a>
+</div>
+
+          <div class="px-2">
+    <a href="https://mybinder.org/v2/gh/naspert/random-thoughts-reboot/master?filepath=_notebooks%2F2020-12-04-daskwiki-part2.ipynb" target="_blank">
+        <img class="notebook-badge-image" src="/random-thoughts-reboot/assets/badges/binder.svg" alt="Open In Binder"/>
+    </a>
+</div>
+
+          <div class="px-2">
+    <a href="https://colab.research.google.com/github/naspert/random-thoughts-reboot/blob/master/_notebooks/2020-12-04-daskwiki-part2.ipynb" target="_blank">
+        <img class="notebook-badge-image" src="/random-thoughts-reboot/assets/badges/colab.svg" alt="Open In Colab"/>
+    </a>
+</div>
+          <div class="px-2">
+  <a href="https://deepnote.com/launch?url=https%3A%2F%2Fgithub.com%2Fnaspert%2Frandom-thoughts-reboot%2Fblob%2Fmaster%2F_notebooks%2F2020-12-04-daskwiki-part2.ipynb" target="_blank">
+      <img class="notebook-badge-image" src="/random-thoughts-reboot/assets/badges/deepnote.svg" alt="Launch in Deepnote"/>
+  </a>
+</div>
+
+        </div>
+      </header>
+
+  <div class="post-content e-content" itemprop="articleBody">
+    <ul id="toc" class="section-nav">
+<li class="toc-entry toc-h1"><a href="#Merge-redirect-with-pages">Merge redirect with pages </a></li>
+<li class="toc-entry toc-h1"><a href="#Merge-pagelinks">Merge pagelinks </a>
+<ul>
+<li class="toc-entry toc-h2"><a href="#Step-1">Step 1 </a></li>
+<li class="toc-entry toc-h2"><a href="#Step-2">Step 2 </a>
+<ul>
+<li class="toc-entry toc-h3"><a href="#Join-pagelinks-and-redirect">Join pagelinks and redirect </a></li>
+<li class="toc-entry toc-h3"><a href="#Self-links-removal">Self-links removal </a></li>
+<li class="toc-entry toc-h3"><a href="#Ignore-links-on-redirect-pages">Ignore links on redirect pages </a></li>
+<li class="toc-entry toc-h3"><a href="#Cleanup---duplicate-links-removal">Cleanup - duplicate links removal </a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toc-entry toc-h1"><a href="#Conclusions">Conclusions </a></li>
+</ul><!--
+#################################################
+### THIS FILE WAS AUTOGENERATED! DO NOT EDIT! ###
+#################################################
+# file to edit: _notebooks/2020-12-04-daskwiki-part2.ipynb
+-->
+
+<div class="container" id="notebook-container">
+        
+<div class="cell border-box-sizing text_cell rendered">
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>After processing the SQL dumps in <a href="https://dev.clockworkpanda.xyz/wikipedia/dask/2020/12/02/daskwiki.html">part 1</a>, we need to further process the data to make it importable in Neo4j. We need to</p>
+<ul>
+<li>find the id of the pages when redirecting</li>
+<li>find the target id of the page in the <code>pagelinks</code> table, taking into account page redirections</li>
+</ul>
+<p>There are other ways of doing those tasks, and handling redirects can be done directly in Neo4j: you can imagine creating the redirection pages and have links of type <code>REDIRECTS_TO</code> in addition to the "normal" links between pages <code>LINKS_TO</code>. However, this would add a huge number of relationships in the database (I tried it for you), and makes the queries slower and more complex, without bringing (at least for the studies performed in our lab) additional value. Hence the choice of handling redirections prior import.</p>
+<p>Make sure to check the <a href="https://github.com/epfl-lts2/sparkwiki/tree/master/helpers">sparkwiki import guide</a> to get a global view. The <a href="https://github.com/epfl-lts2/sparkwiki/blob/master/src/main/scala/ch/epfl/lts2/wikipedia/DumpProcessor.scala">source code of DumpProcessor</a> is also of interest, as we will replicate its functionalities here.</p>
+
+</div>
+</div>
+</div>
+    
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
+<span class="kn">import</span> <span class="nn">dask</span>
+<span class="kn">import</span> <span class="nn">dask.dataframe</span> <span class="k">as</span> <span class="nn">ddf</span>
+<span class="kn">from</span> <span class="nn">dask.distributed</span> <span class="kn">import</span> <span class="n">LocalCluster</span><span class="p">,</span> <span class="n">Client</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+    
+
+    
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">dask</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">set</span><span class="p">({</span><span class="s1">'temporary_directory'</span><span class="p">:</span> <span class="s1">'/tmp'</span><span class="p">})</span> <span class="c1"># make sure temp dir is local !</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+<div class="output_area">
+
+
+
+<div class="output_text output_subarea output_execute_result">
+<pre>&lt;dask.config.set at 0x7f984190c150&gt;</pre>
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+    
+
+    
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">cluster</span> <span class="o">=</span> <span class="n">LocalCluster</span><span class="p">(</span><span class="n">n_workers</span><span class="o">=</span><span class="mi">6</span><span class="p">,</span> <span class="n">threads_per_worker</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">memory_limit</span><span class="o">=</span><span class="mf">24e9</span><span class="p">)</span> <span class="c1"># adapt to your local resources !</span>
+<span class="n">client</span> <span class="o">=</span> <span class="n">Client</span><span class="p">(</span><span class="n">cluster</span><span class="p">)</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+    
+
+    
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">data_path</span> <span class="o">=</span> <span class="s1">'/data/wikipedia/20201120'</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+    
+
+<div class="cell border-box-sizing text_cell rendered">
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>Read parquet files generated in part 1 from disk</p>
+
+</div>
+</div>
+</div>
+    
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">redirect_df</span> <span class="o">=</span> <span class="n">ddf</span><span class="o">.</span><span class="n">read_parquet</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">data_path</span><span class="p">,</span> <span class="s1">'processed'</span><span class="p">,</span> <span class="s1">'redirect.parquet'</span><span class="p">))</span>
+<span class="n">pages_df</span> <span class="o">=</span> <span class="n">ddf</span><span class="o">.</span><span class="n">read_parquet</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">data_path</span><span class="p">,</span> <span class="s1">'processed'</span><span class="p">,</span> <span class="s1">'pages.parquet'</span><span class="p">))</span>
+<span class="n">pagelinks_df</span> <span class="o">=</span> <span class="n">ddf</span><span class="o">.</span><span class="n">read_parquet</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">data_path</span><span class="p">,</span> <span class="s1">'processed'</span><span class="p">,</span> <span class="s1">'pagelinks.parquet'</span><span class="p">))</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+    
+
+<div class="cell border-box-sizing text_cell rendered">
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>Or read my copy from our s3 bucket on switchengines</p>
+
+</div>
+</div>
+</div>
+    
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">storage_options</span><span class="o">=</span><span class="p">{</span><span class="s1">'anon'</span><span class="p">:</span><span class="kc">True</span><span class="p">,</span> <span class="s1">'client_kwargs'</span><span class="p">:{</span><span class="s1">'endpoint_url'</span><span class="p">:</span><span class="s1">'https://os.unil.cloud.switch.ch'</span><span class="p">}}</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+    
+
+    
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">redirect_df</span> <span class="o">=</span> <span class="n">ddf</span><span class="o">.</span><span class="n">read_parquet</span><span class="p">(</span><span class="s1">'s3://lts2-wikipedia/enwiki/20201120/redirect.parquet'</span><span class="p">,</span> <span class="n">storage_options</span><span class="o">=</span><span class="n">storage_options</span><span class="p">)</span>
+<span class="n">pages_df</span> <span class="o">=</span> <span class="n">ddf</span><span class="o">.</span><span class="n">read_parquet</span><span class="p">(</span><span class="s1">'s3://lts2-wikipedia/enwiki/20201120/pages.parquet'</span><span class="p">,</span> <span class="n">storage_options</span><span class="o">=</span><span class="n">storage_options</span><span class="p">)</span>
+<span class="n">pagelinks_df</span> <span class="o">=</span> <span class="n">ddf</span><span class="o">.</span><span class="n">read_parquet</span><span class="p">(</span><span class="s1">'s3://lts2-wikipedia/enwiki/20201120/pagelinks.parquet'</span><span class="p">,</span> <span class="n">storage_options</span><span class="o">=</span><span class="n">storage_options</span><span class="p">)</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+    
+
+<div class="cell border-box-sizing text_cell rendered">
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>Just a quick glance at the dataframe to make sure the data is here</p>
+
+</div>
+</div>
+</div>
+    
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">redirect_df</span><span class="o">.</span><span class="n">head</span><span class="p">(</span><span class="mi">10</span><span class="p">)</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+<div class="output_area">
+
+
+<div class="output_html rendered_html output_subarea output_execute_result">
+<div>
+<style scoped="">
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>target_ns</th>
+      <th>title</th>
+      <th>inter_wiki</th>
+      <th>fragment</th>
+    </tr>
+    <tr>
+      <th>from</th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>10</th>
+      <td>0</td>
+      <td>Computer_accessibility</td>
+      <td>''</td>
+      <td>''</td>
+    </tr>
+    <tr>
+      <th>13</th>
+      <td>0</td>
+      <td>History_of_Afghanistan</td>
+      <td>''</td>
+      <td>''</td>
+    </tr>
+    <tr>
+      <th>14</th>
+      <td>0</td>
+      <td>Geography_of_Afghanistan</td>
+      <td>''</td>
+      <td>''</td>
+    </tr>
+    <tr>
+      <th>15</th>
+      <td>0</td>
+      <td>Demographics_of_Afghanistan</td>
+      <td>''</td>
+      <td>''</td>
+    </tr>
+    <tr>
+      <th>18</th>
+      <td>0</td>
+      <td>Communications_in_Afghanistan</td>
+      <td>''</td>
+      <td>''</td>
+    </tr>
+    <tr>
+      <th>19</th>
+      <td>0</td>
+      <td>Transport_in_Afghanistan</td>
+      <td>''</td>
+      <td>''</td>
+    </tr>
+    <tr>
+      <th>20</th>
+      <td>0</td>
+      <td>Afghan_Armed_Forces</td>
+      <td>''</td>
+      <td>''</td>
+    </tr>
+    <tr>
+      <th>21</th>
+      <td>0</td>
+      <td>Foreign_relations_of_Afghanistan</td>
+      <td>''</td>
+      <td>''</td>
+    </tr>
+    <tr>
+      <th>23</th>
+      <td>0</td>
+      <td>Assistive_technology</td>
+      <td>''</td>
+      <td>''</td>
+    </tr>
+    <tr>
+      <th>24</th>
+      <td>0</td>
+      <td>Amoeba</td>
+      <td>''</td>
+      <td>''</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+    
+
+    
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">pages_df</span><span class="o">.</span><span class="n">head</span><span class="p">(</span><span class="mi">10</span><span class="p">)</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+<div class="output_area">
+
+
+<div class="output_html rendered_html output_subarea output_execute_result">
+<div>
+<style scoped="">
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>namespace</th>
+      <th>title</th>
+      <th>is_redirect</th>
+      <th>is_new</th>
+    </tr>
+    <tr>
+      <th>id</th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>10</th>
+      <td>0</td>
+      <td>AccessibleComputing</td>
+      <td>True</td>
+      <td>False</td>
+    </tr>
+    <tr>
+      <th>12</th>
+      <td>0</td>
+      <td>Anarchism</td>
+      <td>False</td>
+      <td>False</td>
+    </tr>
+    <tr>
+      <th>13</th>
+      <td>0</td>
+      <td>AfghanistanHistory</td>
+      <td>True</td>
+      <td>False</td>
+    </tr>
+    <tr>
+      <th>14</th>
+      <td>0</td>
+      <td>AfghanistanGeography</td>
+      <td>True</td>
+      <td>False</td>
+    </tr>
+    <tr>
+      <th>15</th>
+      <td>0</td>
+      <td>AfghanistanPeople</td>
+      <td>True</td>
+      <td>False</td>
+    </tr>
+    <tr>
+      <th>18</th>
+      <td>0</td>
+      <td>AfghanistanCommunications</td>
+      <td>True</td>
+      <td>False</td>
+    </tr>
+    <tr>
+      <th>19</th>
+      <td>0</td>
+      <td>AfghanistanTransportations</td>
+      <td>True</td>
+      <td>False</td>
+    </tr>
+    <tr>
+      <th>20</th>
+      <td>0</td>
+      <td>AfghanistanMilitary</td>
+      <td>True</td>
+      <td>False</td>
+    </tr>
+    <tr>
+      <th>21</th>
+      <td>0</td>
+      <td>AfghanistanTransnationalIssues</td>
+      <td>True</td>
+      <td>False</td>
+    </tr>
+    <tr>
+      <th>23</th>
+      <td>0</td>
+      <td>AssistiveTechnology</td>
+      <td>True</td>
+      <td>False</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+    
+
+    
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">pagelinks_df</span><span class="o">.</span><span class="n">head</span><span class="p">(</span><span class="mi">10</span><span class="p">)</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+<div class="output_area">
+
+
+<div class="output_html rendered_html output_subarea output_execute_result">
+<div>
+<style scoped="">
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>from</th>
+      <th>namespace</th>
+      <th>title</th>
+      <th>from_namespace</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>0</th>
+      <td>4748</td>
+      <td>0</td>
+      <td>!</td>
+      <td>0</td>
+    </tr>
+    <tr>
+      <th>1</th>
+      <td>9773</td>
+      <td>0</td>
+      <td>!</td>
+      <td>0</td>
+    </tr>
+    <tr>
+      <th>2</th>
+      <td>15154</td>
+      <td>0</td>
+      <td>!</td>
+      <td>0</td>
+    </tr>
+    <tr>
+      <th>3</th>
+      <td>25213</td>
+      <td>0</td>
+      <td>!</td>
+      <td>0</td>
+    </tr>
+    <tr>
+      <th>4</th>
+      <td>613303</td>
+      <td>0</td>
+      <td>!</td>
+      <td>0</td>
+    </tr>
+    <tr>
+      <th>5</th>
+      <td>1028188</td>
+      <td>0</td>
+      <td>!</td>
+      <td>0</td>
+    </tr>
+    <tr>
+      <th>6</th>
+      <td>1497620</td>
+      <td>0</td>
+      <td>!</td>
+      <td>0</td>
+    </tr>
+    <tr>
+      <th>7</th>
+      <td>2875276</td>
+      <td>0</td>
+      <td>!</td>
+      <td>0</td>
+    </tr>
+    <tr>
+      <th>8</th>
+      <td>2988645</td>
+      <td>0</td>
+      <td>!</td>
+      <td>0</td>
+    </tr>
+    <tr>
+      <th>9</th>
+      <td>4355567</td>
+      <td>0</td>
+      <td>!</td>
+      <td>0</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+    
+
+<div class="cell border-box-sizing text_cell rendered">
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h1 id="Merge-redirect-with-pages">
+<a class="anchor" href="#Merge-redirect-with-pages" aria-hidden="true"><span class="octicon octicon-link"></span></a>Merge redirect with pages<a class="anchor-link" href="#Merge-redirect-with-pages"> </a>
+</h1>
+<p>We need to find the id of the page we are redirecting to. E.g. page with id=10 'AccessibleComputing' redirects to 'Computer_accessibility'</p>
+
+</div>
+</div>
+</div>
+    
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">pages_df</span><span class="p">[</span><span class="n">pages_df</span><span class="p">[</span><span class="s1">'title'</span><span class="p">]</span> <span class="o">==</span> <span class="s1">'Computer_accessibility'</span><span class="p">]</span><span class="o">.</span><span class="n">compute</span><span class="p">()</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+<div class="output_area">
+
+
+<div class="output_html rendered_html output_subarea output_execute_result">
+<div>
+<style scoped="">
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>namespace</th>
+      <th>title</th>
+      <th>is_redirect</th>
+      <th>is_new</th>
+    </tr>
+    <tr>
+      <th>id</th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>411964</th>
+      <td>0</td>
+      <td>Computer_accessibility</td>
+      <td>False</td>
+      <td>False</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+    
+
+<div class="cell border-box-sizing text_cell rendered">
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>Here is how sparkwiki does the join between redirect and page DataFrames. We can skip the join on the namespace as we only kept namespace 0 in our pre-processed DataFrames (sparkwiki was designed to keep categories so additional care needs to be taken to get the proper id).</p>
+
+<pre><code>redirectDf.withColumn("id", redirectDf.col("from"))
+                .join(pageDf.drop(pageDf.col("title")), "id")
+                .select("from", "targetNamespace", "title")
+                .withColumn("namespace", redirectDf.col("targetNamespace"))
+                .join(pageDf, Seq("title", "namespace")).select("from", "id", "title")
+                .as[MergedRedirect]</code></pre>
+<p>Here is the equivalent in python. The <code>reset_index</code> calls are needed because we need the indices in the resulting dataframe. Since we only kept namespace 0 pages, we can join using the <code>title</code> field only.</p>
+
+</div>
+</div>
+</div>
+    
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">redirect_merged</span> <span class="o">=</span> <span class="n">redirect_df</span><span class="o">.</span><span class="n">reset_index</span><span class="p">()</span><span class="o">.</span><span class="n">merge</span><span class="p">(</span><span class="n">pages_df</span><span class="o">.</span><span class="n">reset_index</span><span class="p">(),</span> <span class="n">left_on</span><span class="o">=</span><span class="s1">'title'</span><span class="p">,</span> <span class="n">right_on</span><span class="o">=</span><span class="s1">'title'</span><span class="p">)</span>\
+                    <span class="o">.</span><span class="n">drop</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="p">[</span><span class="s1">'inter_wiki'</span><span class="p">,</span> <span class="s1">'fragment'</span><span class="p">,</span> <span class="s1">'namespace'</span><span class="p">,</span> <span class="s1">'is_new'</span><span class="p">,</span> <span class="s1">'target_ns'</span><span class="p">])</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+    
+
+<div class="cell border-box-sizing text_cell rendered">
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>We have still have leftover redirects that are not fully resolved</p>
+
+</div>
+</div>
+</div>
+    
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">redirect_merged</span><span class="p">[</span><span class="n">redirect_merged</span><span class="p">[</span><span class="s1">'is_redirect'</span><span class="p">]]</span><span class="o">.</span><span class="n">head</span><span class="p">(</span><span class="mi">20</span><span class="p">,</span> <span class="n">npartitions</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+<div class="output_area">
+
+
+<div class="output_html rendered_html output_subarea output_execute_result">
+<div>
+<style scoped="">
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>from</th>
+      <th>title</th>
+      <th>id</th>
+      <th>is_redirect</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>101499</th>
+      <td>12242480</td>
+      <td>New_Mexico_State_Road_333</td>
+      <td>2788393</td>
+      <td>True</td>
+    </tr>
+    <tr>
+      <th>232021</th>
+      <td>65663584</td>
+      <td>Senator_Shapiro_(disambiguation)</td>
+      <td>65663584</td>
+      <td>True</td>
+    </tr>
+    <tr>
+      <th>214813</th>
+      <td>56753023</td>
+      <td>Ran_Neu-Ner</td>
+      <td>51045453</td>
+      <td>True</td>
+    </tr>
+    <tr>
+      <th>229234</th>
+      <td>64811911</td>
+      <td>Monastery_of_Loukous</td>
+      <td>65734014</td>
+      <td>True</td>
+    </tr>
+    <tr>
+      <th>220021</th>
+      <td>59393217</td>
+      <td>Micro_TDH</td>
+      <td>59393217</td>
+      <td>True</td>
+    </tr>
+    <tr>
+      <th>231248</th>
+      <td>65733619</td>
+      <td>AnTuTu/11_Pro_Max_VS_S20_VS_Xperia_1_ii_VS_Fin...</td>
+      <td>65733623</td>
+      <td>True</td>
+    </tr>
+    <tr>
+      <th>229301</th>
+      <td>63009285</td>
+      <td>Fa_Hai</td>
+      <td>17826148</td>
+      <td>True</td>
+    </tr>
+    <tr>
+      <th>229302</th>
+      <td>63371040</td>
+      <td>Fa_Hai</td>
+      <td>17826148</td>
+      <td>True</td>
+    </tr>
+    <tr>
+      <th>232399</th>
+      <td>65521541</td>
+      <td>Centipetalism</td>
+      <td>65730750</td>
+      <td>True</td>
+    </tr>
+    <tr>
+      <th>232400</th>
+      <td>65524209</td>
+      <td>Centipetalism</td>
+      <td>65730750</td>
+      <td>True</td>
+    </tr>
+    <tr>
+      <th>229236</th>
+      <td>61459055</td>
+      <td>Baseco,_Manila</td>
+      <td>65734038</td>
+      <td>True</td>
+    </tr>
+    <tr>
+      <th>229237</th>
+      <td>61459107</td>
+      <td>Baseco,_Manila</td>
+      <td>65734038</td>
+      <td>True</td>
+    </tr>
+    <tr>
+      <th>229238</th>
+      <td>64901313</td>
+      <td>Baseco,_Manila</td>
+      <td>65734038</td>
+      <td>True</td>
+    </tr>
+    <tr>
+      <th>235946</th>
+      <td>65731901</td>
+      <td>Indigenous_land_conflicts_on_the_Mexico–United...</td>
+      <td>65731974</td>
+      <td>True</td>
+    </tr>
+    <tr>
+      <th>170127</th>
+      <td>37065249</td>
+      <td>Kunthavai_Nachiaar_College</td>
+      <td>65734319</td>
+      <td>True</td>
+    </tr>
+    <tr>
+      <th>227222</th>
+      <td>65386007</td>
+      <td>COVID-19_pandemic_in_Door_County,_Wisconsin</td>
+      <td>65282057</td>
+      <td>True</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+    
+
+<div class="cell border-box-sizing text_cell rendered">
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>Let us just discard them for now...</p>
+
+</div>
+</div>
+</div>
+    
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">redirect_merged_filt</span> <span class="o">=</span> <span class="n">redirect_merged</span><span class="p">[</span><span class="o">~</span><span class="n">redirect_merged</span><span class="p">[</span><span class="s1">'is_redirect'</span><span class="p">]]</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+    
+
+    
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">redirect_merged_filt</span><span class="o">.</span><span class="n">to_parquet</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">data_path</span><span class="p">,</span> <span class="s1">'processed'</span><span class="p">,</span> <span class="s1">'redirect_merged.parquet'</span><span class="p">),</span> <span class="n">compression</span><span class="o">=</span><span class="s1">'gzip'</span><span class="p">)</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+    
+
+<div class="cell border-box-sizing text_cell rendered">
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h1 id="Merge-pagelinks">
+<a class="anchor" href="#Merge-pagelinks" aria-hidden="true"><span class="octicon octicon-link"></span></a>Merge pagelinks<a class="anchor-link" href="#Merge-pagelinks"> </a>
+</h1>
+<p>This is a bit more complicated, two steps are needed.</p>
+<h2 id="Step-1">
+<a class="anchor" href="#Step-1" aria-hidden="true"><span class="octicon octicon-link"></span></a>Step 1<a class="anchor-link" href="#Step-1"> </a>
+</h2>
+<p>Find the id of the target page based on the <code>title</code> field, quite similar to the redirects we merged before.
+Here is the sparkwiki version :</p>
+
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p><code>val pagelinks_id = pagelinks.join(pages, Seq("title", "namespace"))
+                                .select("from", "id", "title", "fromNamespace", "namespace")</code></p>
+
+</div>
+</div>
+</div>
+    
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">pagelinks_id</span> <span class="o">=</span> <span class="n">pagelinks_df</span><span class="o">.</span><span class="n">drop</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="p">[</span><span class="s1">'namespace'</span><span class="p">,</span> <span class="s1">'from_namespace'</span><span class="p">])</span><span class="o">.</span><span class="n">merge</span><span class="p">(</span><span class="n">pages_df</span><span class="o">.</span><span class="n">drop</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="p">[</span><span class="s1">'namespace'</span><span class="p">])</span><span class="o">.</span><span class="n">reset_index</span><span class="p">()</span>\
+                        <span class="o">.</span><span class="n">drop</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="p">[</span><span class="s1">'is_new'</span><span class="p">]),</span> <span class="n">left_on</span><span class="o">=</span><span class="s1">'title'</span><span class="p">,</span> <span class="n">right_on</span><span class="o">=</span><span class="s1">'title'</span><span class="p">)</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+    
+
+<div class="cell border-box-sizing text_cell rendered">
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>Since we left out anything not being in namespace 0, a merge on the <code>title</code> field is sufficient.</p>
+
+</div>
+</div>
+</div>
+    
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">pagelinks_id</span><span class="o">.</span><span class="n">head</span><span class="p">()</span> <span class="c1"># Expensive !</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+<div class="output_area">
+
+
+<div class="output_html rendered_html output_subarea output_execute_result">
+<div>
+<style scoped="">
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>from</th>
+      <th>title</th>
+      <th>id</th>
+      <th>is_redirect</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>0</th>
+      <td>364060</td>
+      <td>!Kung_languages</td>
+      <td>63813576</td>
+      <td>True</td>
+    </tr>
+    <tr>
+      <th>1</th>
+      <td>453953</td>
+      <td>!Kung_languages</td>
+      <td>63813576</td>
+      <td>True</td>
+    </tr>
+    <tr>
+      <th>2</th>
+      <td>453979</td>
+      <td>!Kung_languages</td>
+      <td>63813576</td>
+      <td>True</td>
+    </tr>
+    <tr>
+      <th>3</th>
+      <td>453991</td>
+      <td>!Kung_languages</td>
+      <td>63813576</td>
+      <td>True</td>
+    </tr>
+    <tr>
+      <th>4</th>
+      <td>1210028</td>
+      <td>!Kung_languages</td>
+      <td>63813576</td>
+      <td>True</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+    
+
+    
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span> 
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+    
+
+    
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">pagelinks_id</span><span class="o">.</span><span class="n">to_parquet</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">data_path</span><span class="p">,</span> <span class="s1">'processed'</span><span class="p">,</span> <span class="s1">'pagelinks_id.parquet'</span><span class="p">),</span> <span class="n">compression</span><span class="o">=</span><span class="s1">'gzip'</span><span class="p">)</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+    
+
+    
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">pagelinks_id</span><span class="p">[</span><span class="n">pagelinks_id</span><span class="p">[</span><span class="s1">'from'</span><span class="p">]</span><span class="o">==</span><span class="mi">774551</span><span class="p">]</span><span class="o">.</span><span class="n">head</span><span class="p">(</span><span class="mi">20</span><span class="p">)</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+<div class="output_area">
+
+
+<div class="output_html rendered_html output_subarea output_execute_result">
+<div>
+<style scoped="">
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>from</th>
+      <th>title</th>
+      <th>id</th>
+      <th>is_redirect</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>314</th>
+      <td>774551</td>
+      <td>(10397)_1997_SX33</td>
+      <td>33450953</td>
+      <td>True</td>
+    </tr>
+    <tr>
+      <th>319</th>
+      <td>774551</td>
+      <td>(121014)_1999_AJ22</td>
+      <td>33715493</td>
+      <td>True</td>
+    </tr>
+    <tr>
+      <th>320</th>
+      <td>774551</td>
+      <td>(12821)_1996_RG1</td>
+      <td>33476015</td>
+      <td>True</td>
+    </tr>
+    <tr>
+      <th>321</th>
+      <td>774551</td>
+      <td>(136838)_1997_WG22</td>
+      <td>33716060</td>
+      <td>True</td>
+    </tr>
+    <tr>
+      <th>325</th>
+      <td>774551</td>
+      <td>(15901)_1997_RY8</td>
+      <td>33496407</td>
+      <td>True</td>
+    </tr>
+    <tr>
+      <th>443</th>
+      <td>774551</td>
+      <td>(20261)_1998_FM12</td>
+      <td>33508561</td>
+      <td>True</td>
+    </tr>
+    <tr>
+      <th>591</th>
+      <td>774551</td>
+      <td>(246880)_1995_SR54</td>
+      <td>33737413</td>
+      <td>True</td>
+    </tr>
+    <tr>
+      <th>593</th>
+      <td>774551</td>
+      <td>(264290)_1998_SD27</td>
+      <td>33737645</td>
+      <td>True</td>
+    </tr>
+    <tr>
+      <th>594</th>
+      <td>774551</td>
+      <td>(26987)_1997_WP1</td>
+      <td>33517118</td>
+      <td>True</td>
+    </tr>
+    <tr>
+      <th>602</th>
+      <td>774551</td>
+      <td>(31177)_1997_XH11</td>
+      <td>33538369</td>
+      <td>True</td>
+    </tr>
+    <tr>
+      <th>708</th>
+      <td>774551</td>
+      <td>(43886)_1995_GR7</td>
+      <td>33583541</td>
+      <td>True</td>
+    </tr>
+    <tr>
+      <th>709</th>
+      <td>774551</td>
+      <td>(47129)_1999_CR118</td>
+      <td>33612119</td>
+      <td>True</td>
+    </tr>
+    <tr>
+      <th>716</th>
+      <td>774551</td>
+      <td>(55870)_1997_TD26</td>
+      <td>33647299</td>
+      <td>True</td>
+    </tr>
+    <tr>
+      <th>721</th>
+      <td>774551</td>
+      <td>(69478)_1996_XO15</td>
+      <td>33652547</td>
+      <td>True</td>
+    </tr>
+    <tr>
+      <th>725</th>
+      <td>774551</td>
+      <td>(73979)_1998_DF8</td>
+      <td>33659593</td>
+      <td>True</td>
+    </tr>
+    <tr>
+      <th>727</th>
+      <td>774551</td>
+      <td>(8227)_1996_VD4</td>
+      <td>33446736</td>
+      <td>True</td>
+    </tr>
+    <tr>
+      <th>729</th>
+      <td>774551</td>
+      <td>(85504)_1997_TC26</td>
+      <td>33678855</td>
+      <td>True</td>
+    </tr>
+    <tr>
+      <th>730</th>
+      <td>774551</td>
+      <td>(85659)_1998_QU29</td>
+      <td>33684922</td>
+      <td>True</td>
+    </tr>
+    <tr>
+      <th>732</th>
+      <td>774551</td>
+      <td>(90919)_1997_PA5</td>
+      <td>33687137</td>
+      <td>True</td>
+    </tr>
+    <tr>
+      <th>733</th>
+      <td>774551</td>
+      <td>(96300)_1996_SC8</td>
+      <td>33687729</td>
+      <td>True</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+    
+
+<div class="cell border-box-sizing text_cell rendered">
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="Step-2">
+<a class="anchor" href="#Step-2" aria-hidden="true"><span class="octicon octicon-link"></span></a>Step 2<a class="anchor-link" href="#Step-2"> </a>
+</h2>
+<p>Now the more tricky part is to resolve redirections.</p>
+
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+
+<pre><code>val linksDf = pgLinksIdDf.withColumn("inter", pgLinksIdDf.col("id"))
+                   .join(redirectDf.withColumn("inter", redirectDf.col("from")).withColumnRenamed("from", "from_r").withColumnRenamed("id", "to_r"), Seq("inter"), "left")
+                   .withColumn("dest", when(col("to_r").isNotNull, col("to_r")).otherwise(col("id")))
+                   .select("from", "dest")
+                   .filter($"from" !== $"dest") // remove self-links
+                   .distinct // redirect removal will cause duplicates -&gt; remove them</code></pre>
+
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>Reload the computed dataframes from disk to avoid computations...</p>
+
+</div>
+</div>
+</div>
+    
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">pagelinks_id</span> <span class="o">=</span> <span class="n">ddf</span><span class="o">.</span><span class="n">read_parquet</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">data_path</span><span class="p">,</span> <span class="s1">'processed'</span><span class="p">,</span> <span class="s1">'pagelinks_id.parquet'</span><span class="p">))</span>
+<span class="n">redirect_merged</span> <span class="o">=</span> <span class="n">ddf</span><span class="o">.</span><span class="n">read_parquet</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">data_path</span><span class="p">,</span> <span class="s1">'processed'</span><span class="p">,</span> <span class="s1">'redirect_merged.parquet'</span><span class="p">))</span> 
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+    
+
+<div class="cell border-box-sizing text_cell rendered">
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>...or fetch them from S3</p>
+
+</div>
+</div>
+</div>
+    
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">redirect_merged</span> <span class="o">=</span> <span class="n">ddf</span><span class="o">.</span><span class="n">read_parquet</span><span class="p">(</span><span class="s1">'s3://lts2-wikipedia/enwiki/20201120/redirect_merged.parquet'</span><span class="p">,</span> <span class="n">storage_options</span><span class="o">=</span><span class="n">storage_options</span><span class="p">)</span>
+<span class="n">pagelinks_id</span> <span class="o">=</span> <span class="n">ddf</span><span class="o">.</span><span class="n">read_parquet</span><span class="p">(</span><span class="s1">'s3://lts2-wikipedia/enwiki/20201120/pagelinks_id.parquet'</span><span class="p">,</span> <span class="n">storage_options</span><span class="o">=</span><span class="n">storage_options</span><span class="p">)</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+    
+
+<div class="cell border-box-sizing text_cell rendered">
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h3 id="Join-pagelinks-and-redirect">
+<a class="anchor" href="#Join-pagelinks-and-redirect" aria-hidden="true"><span class="octicon octicon-link"></span></a>Join pagelinks and redirect<a class="anchor-link" href="#Join-pagelinks-and-redirect"> </a>
+</h3>
+<p>Let us see how our data looks like after the left join</p>
+
+</div>
+</div>
+</div>
+    
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">pagelinks_redir_merge</span> <span class="o">=</span> <span class="n">pagelinks_id</span><span class="o">.</span><span class="n">merge</span><span class="p">(</span><span class="n">redirect_merged</span><span class="o">.</span><span class="n">reset_index</span><span class="p">(),</span> <span class="n">left_on</span><span class="o">=</span><span class="p">[</span><span class="s1">'id'</span><span class="p">],</span> <span class="n">right_on</span><span class="o">=</span><span class="p">[</span><span class="s1">'from'</span><span class="p">],</span> <span class="n">how</span><span class="o">=</span><span class="s1">'left'</span><span class="p">)</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+    
+
+    
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">pagelinks_redir_merge</span><span class="o">.</span><span class="n">head</span><span class="p">(</span><span class="mi">20</span><span class="p">)</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+<div class="output_area">
+
+
+<div class="output_html rendered_html output_subarea output_execute_result">
+<div>
+<style scoped="">
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>from_x</th>
+      <th>title_x</th>
+      <th>id_x</th>
+      <th>is_redirect_x</th>
+      <th>index</th>
+      <th>from_y</th>
+      <th>title_y</th>
+      <th>id_y</th>
+      <th>is_redirect_y</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>0</th>
+      <td>18301841</td>
+      <td>.xsi</td>
+      <td>26107610</td>
+      <td>True</td>
+      <td>75539.0</td>
+      <td>26107610.0</td>
+      <td>Autodesk_Softimage</td>
+      <td>1931049.0</td>
+      <td>False</td>
+    </tr>
+    <tr>
+      <th>1</th>
+      <td>23790514</td>
+      <td>1001st_Helicopter_Squadron</td>
+      <td>54167065</td>
+      <td>True</td>
+      <td>136648.0</td>
+      <td>54167065.0</td>
+      <td>1st_Helicopter_Squadron</td>
+      <td>8659503.0</td>
+      <td>False</td>
+    </tr>
+    <tr>
+      <th>2</th>
+      <td>415160</td>
+      <td>10th_Infantry_Division_(Greece)</td>
+      <td>34514441</td>
+      <td>True</td>
+      <td>165820.0</td>
+      <td>34514441.0</td>
+      <td>10th_Mechanized_Infantry_Brigade_(Greece)</td>
+      <td>34514432.0</td>
+      <td>False</td>
+    </tr>
+    <tr>
+      <th>3</th>
+      <td>425895</td>
+      <td>10th_Infantry_Division_(Greece)</td>
+      <td>34514441</td>
+      <td>True</td>
+      <td>165820.0</td>
+      <td>34514441.0</td>
+      <td>10th_Mechanized_Infantry_Brigade_(Greece)</td>
+      <td>34514432.0</td>
+      <td>False</td>
+    </tr>
+    <tr>
+      <th>4</th>
+      <td>3042106</td>
+      <td>10th_Infantry_Division_(Greece)</td>
+      <td>34514441</td>
+      <td>True</td>
+      <td>165820.0</td>
+      <td>34514441.0</td>
+      <td>10th_Mechanized_Infantry_Brigade_(Greece)</td>
+      <td>34514432.0</td>
+      <td>False</td>
+    </tr>
+    <tr>
+      <th>5</th>
+      <td>9540507</td>
+      <td>10th_Infantry_Division_(Greece)</td>
+      <td>34514441</td>
+      <td>True</td>
+      <td>165820.0</td>
+      <td>34514441.0</td>
+      <td>10th_Mechanized_Infantry_Brigade_(Greece)</td>
+      <td>34514432.0</td>
+      <td>False</td>
+    </tr>
+    <tr>
+      <th>6</th>
+      <td>9648456</td>
+      <td>10th_Infantry_Division_(Greece)</td>
+      <td>34514441</td>
+      <td>True</td>
+      <td>165820.0</td>
+      <td>34514441.0</td>
+      <td>10th_Mechanized_Infantry_Brigade_(Greece)</td>
+      <td>34514432.0</td>
+      <td>False</td>
+    </tr>
+    <tr>
+      <th>7</th>
+      <td>9648459</td>
+      <td>10th_Infantry_Division_(Greece)</td>
+      <td>34514441</td>
+      <td>True</td>
+      <td>165820.0</td>
+      <td>34514441.0</td>
+      <td>10th_Mechanized_Infantry_Brigade_(Greece)</td>
+      <td>34514432.0</td>
+      <td>False</td>
+    </tr>
+    <tr>
+      <th>8</th>
+      <td>9648466</td>
+      <td>10th_Infantry_Division_(Greece)</td>
+      <td>34514441</td>
+      <td>True</td>
+      <td>165820.0</td>
+      <td>34514441.0</td>
+      <td>10th_Mechanized_Infantry_Brigade_(Greece)</td>
+      <td>34514432.0</td>
+      <td>False</td>
+    </tr>
+    <tr>
+      <th>9</th>
+      <td>9648476</td>
+      <td>10th_Infantry_Division_(Greece)</td>
+      <td>34514441</td>
+      <td>True</td>
+      <td>165820.0</td>
+      <td>34514441.0</td>
+      <td>10th_Mechanized_Infantry_Brigade_(Greece)</td>
+      <td>34514432.0</td>
+      <td>False</td>
+    </tr>
+    <tr>
+      <th>10</th>
+      <td>10980141</td>
+      <td>10th_Infantry_Division_(Greece)</td>
+      <td>34514441</td>
+      <td>True</td>
+      <td>165820.0</td>
+      <td>34514441.0</td>
+      <td>10th_Mechanized_Infantry_Brigade_(Greece)</td>
+      <td>34514432.0</td>
+      <td>False</td>
+    </tr>
+    <tr>
+      <th>11</th>
+      <td>18552607</td>
+      <td>10th_Infantry_Division_(Greece)</td>
+      <td>34514441</td>
+      <td>True</td>
+      <td>165820.0</td>
+      <td>34514441.0</td>
+      <td>10th_Mechanized_Infantry_Brigade_(Greece)</td>
+      <td>34514432.0</td>
+      <td>False</td>
+    </tr>
+    <tr>
+      <th>12</th>
+      <td>18585691</td>
+      <td>10th_Infantry_Division_(Greece)</td>
+      <td>34514441</td>
+      <td>True</td>
+      <td>165820.0</td>
+      <td>34514441.0</td>
+      <td>10th_Mechanized_Infantry_Brigade_(Greece)</td>
+      <td>34514432.0</td>
+      <td>False</td>
+    </tr>
+    <tr>
+      <th>13</th>
+      <td>28409618</td>
+      <td>10th_Infantry_Division_(Greece)</td>
+      <td>34514441</td>
+      <td>True</td>
+      <td>165820.0</td>
+      <td>34514441.0</td>
+      <td>10th_Mechanized_Infantry_Brigade_(Greece)</td>
+      <td>34514432.0</td>
+      <td>False</td>
+    </tr>
+    <tr>
+      <th>14</th>
+      <td>29526040</td>
+      <td>10th_Infantry_Division_(Greece)</td>
+      <td>34514441</td>
+      <td>True</td>
+      <td>165820.0</td>
+      <td>34514441.0</td>
+      <td>10th_Mechanized_Infantry_Brigade_(Greece)</td>
+      <td>34514432.0</td>
+      <td>False</td>
+    </tr>
+    <tr>
+      <th>15</th>
+      <td>31814001</td>
+      <td>10th_Infantry_Division_(Greece)</td>
+      <td>34514441</td>
+      <td>True</td>
+      <td>165820.0</td>
+      <td>34514441.0</td>
+      <td>10th_Mechanized_Infantry_Brigade_(Greece)</td>
+      <td>34514432.0</td>
+      <td>False</td>
+    </tr>
+    <tr>
+      <th>16</th>
+      <td>32190319</td>
+      <td>10th_Infantry_Division_(Greece)</td>
+      <td>34514441</td>
+      <td>True</td>
+      <td>165820.0</td>
+      <td>34514441.0</td>
+      <td>10th_Mechanized_Infantry_Brigade_(Greece)</td>
+      <td>34514432.0</td>
+      <td>False</td>
+    </tr>
+    <tr>
+      <th>17</th>
+      <td>32215624</td>
+      <td>10th_Infantry_Division_(Greece)</td>
+      <td>34514441</td>
+      <td>True</td>
+      <td>165820.0</td>
+      <td>34514441.0</td>
+      <td>10th_Mechanized_Infantry_Brigade_(Greece)</td>
+      <td>34514432.0</td>
+      <td>False</td>
+    </tr>
+    <tr>
+      <th>18</th>
+      <td>32471803</td>
+      <td>10th_Infantry_Division_(Greece)</td>
+      <td>34514441</td>
+      <td>True</td>
+      <td>165820.0</td>
+      <td>34514441.0</td>
+      <td>10th_Mechanized_Infantry_Brigade_(Greece)</td>
+      <td>34514432.0</td>
+      <td>False</td>
+    </tr>
+    <tr>
+      <th>19</th>
+      <td>34514250</td>
+      <td>10th_Infantry_Division_(Greece)</td>
+      <td>34514441</td>
+      <td>True</td>
+      <td>165820.0</td>
+      <td>34514441.0</td>
+      <td>10th_Mechanized_Infantry_Brigade_(Greece)</td>
+      <td>34514432.0</td>
+      <td>False</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+    
+
+<div class="cell border-box-sizing text_cell rendered">
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>We need to keep id <code>id_x</code> column when no redirection exists, and the <code>id_y</code> when the page is redirected. This is done by creating a new column (I did not find how to do it using a single statement as the original Scala code does)</p>
+
+</div>
+</div>
+</div>
+    
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">pagelinks_redir_merge</span><span class="p">[</span><span class="s1">'id_merge'</span><span class="p">]</span> <span class="o">=</span> <span class="n">pagelinks_redir_merge</span><span class="p">[</span><span class="s1">'id_x'</span><span class="p">]</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">pagelinks_redir_merge</span><span class="p">[</span><span class="s1">'id_y'</span><span class="p">]</span><span class="o">.</span><span class="n">isnull</span><span class="p">(),</span> <span class="n">pagelinks_redir_merge</span><span class="p">[</span><span class="s1">'id_y'</span><span class="p">])</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+    
+
+    
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">pagelinks_redir_merge_final</span> <span class="o">=</span> <span class="n">pagelinks_redir_merge</span><span class="o">.</span><span class="n">drop</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="p">[</span><span class="s1">'id_x'</span><span class="p">,</span> <span class="s1">'index'</span><span class="p">,</span> <span class="s1">'title_x'</span><span class="p">,</span> <span class="s1">'id_y'</span><span class="p">,</span> <span class="s1">'title_y'</span><span class="p">,</span> <span class="s1">'from_y'</span><span class="p">,</span> <span class="s1">'is_redirect_x'</span><span class="p">,</span> <span class="s1">'is_redirect_y'</span><span class="p">])</span>\
+    <span class="o">.</span><span class="n">rename</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="p">{</span><span class="s1">'id_merge'</span><span class="p">:</span><span class="s1">'dest'</span><span class="p">,</span> <span class="s1">'from_x'</span><span class="p">:</span><span class="s1">'from'</span><span class="p">})</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+    
+
+<div class="cell border-box-sizing text_cell rendered">
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h3 id="Self-links-removal">
+<a class="anchor" href="#Self-links-removal" aria-hidden="true"><span class="octicon octicon-link"></span></a>Self-links removal<a class="anchor-link" href="#Self-links-removal"> </a>
+</h3>
+<p>The resolution of redirections created self-links</p>
+
+</div>
+</div>
+</div>
+    
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">self_links</span> <span class="o">=</span> <span class="n">pagelinks_redir_merge_final</span><span class="p">[</span><span class="n">pagelinks_redir_merge_final</span><span class="p">[</span><span class="s1">'from'</span><span class="p">]</span><span class="o">==</span><span class="n">pagelinks_redir_merge_final</span><span class="p">[</span><span class="s1">'dest'</span><span class="p">]]</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+    
+
+    
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">self_links</span><span class="o">.</span><span class="n">head</span><span class="p">()</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+<div class="output_area">
+
+
+<div class="output_html rendered_html output_subarea output_execute_result">
+<div>
+<style scoped="">
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>from</th>
+      <th>dest</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>21</th>
+      <td>34514432</td>
+      <td>34514432</td>
+    </tr>
+    <tr>
+      <th>333</th>
+      <td>11632630</td>
+      <td>11632630</td>
+    </tr>
+    <tr>
+      <th>3473</th>
+      <td>63932158</td>
+      <td>63932158</td>
+    </tr>
+    <tr>
+      <th>3575</th>
+      <td>45449270</td>
+      <td>45449270</td>
+    </tr>
+    <tr>
+      <th>10134</th>
+      <td>30136816</td>
+      <td>30136816</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+    
+
+<div class="cell border-box-sizing text_cell rendered">
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>Remove the self-links, as they are not useful.</p>
+
+</div>
+</div>
+</div>
+    
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">pagelinks_redir_noself</span> <span class="o">=</span> <span class="n">pagelinks_redir_merge_final</span><span class="p">[</span><span class="n">pagelinks_redir_merge_final</span><span class="p">[</span><span class="s1">'from'</span><span class="p">]</span> <span class="o">!=</span> <span class="n">pagelinks_redir_merge_final</span><span class="p">[</span><span class="s1">'dest'</span><span class="p">]]</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+    
+
+<div class="cell border-box-sizing text_cell rendered">
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>Last step is to remove links from pages that are redirects, as does sparkwiki:</p>
+
+<pre><code>// some redirect pages have regular links -&gt; remove them
+    linksDf.withColumn("id", linksDf.col("from"))
+           .join(pages, "id")
+           .filter($"isRedirect" === false)
+           .select("from", "dest")</code></pre>
+
+</div>
+</div>
+</div>
+    
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">pagelinks_redir_pages</span> <span class="o">=</span> <span class="n">pagelinks_redir_noself</span><span class="o">.</span><span class="n">merge</span><span class="p">(</span><span class="n">pages_df</span><span class="p">,</span> <span class="n">left_on</span><span class="o">=</span><span class="s1">'from'</span><span class="p">,</span> <span class="n">right_index</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>\
+                                                <span class="o">.</span><span class="n">drop</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="p">[</span><span class="s1">'namespace'</span><span class="p">,</span> <span class="s1">'title'</span><span class="p">,</span> <span class="s1">'is_new'</span><span class="p">])</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+    
+
+<div class="cell border-box-sizing text_cell rendered">
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h3 id="Ignore-links-on-redirect-pages">
+<a class="anchor" href="#Ignore-links-on-redirect-pages" aria-hidden="true"><span class="octicon octicon-link"></span></a>Ignore links on redirect pages<a class="anchor-link" href="#Ignore-links-on-redirect-pages"> </a>
+</h3>
+<p>Remove links from pages having <code>is_redirect</code> is true</p>
+
+</div>
+</div>
+</div>
+    
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">pagelinks_redir_clean</span> <span class="o">=</span> <span class="n">pagelinks_redir_pages</span><span class="p">[</span><span class="o">~</span><span class="n">pagelinks_redir_pages</span><span class="p">[</span><span class="s1">'is_redirect'</span><span class="p">]]</span><span class="o">.</span><span class="n">drop</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="p">[</span><span class="s1">'is_redirect'</span><span class="p">])</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+    
+
+<div class="cell border-box-sizing text_cell rendered">
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>And finally save the result, always useful to have a checkpoint to restart from if things go bad</p>
+
+</div>
+</div>
+</div>
+    
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">pagelinks_redir_clean</span><span class="o">.</span><span class="n">to_parquet</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">data_path</span><span class="p">,</span> <span class="s1">'processed'</span><span class="p">,</span> <span class="s1">'pagelinks_redir_clean.parquet'</span><span class="p">),</span> <span class="n">compression</span><span class="o">=</span><span class="s1">'gzip'</span><span class="p">)</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+    
+
+<div class="cell border-box-sizing text_cell rendered">
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h3 id="Cleanup---duplicate-links-removal">
+<a class="anchor" href="#Cleanup---duplicate-links-removal" aria-hidden="true"><span class="octicon octicon-link"></span></a>Cleanup - duplicate links removal<a class="anchor-link" href="#Cleanup---duplicate-links-removal"> </a>
+</h3>
+<p>If you read carefully, you noticed that the <code>distinct</code> call of the first Scala/Spark query. Dask has a <code>drop_duplicates</code> that sound to be what we want.</p>
+<p>First, let us re-read the processing we did so far from disk to avoid recomputation</p>
+
+</div>
+</div>
+</div>
+    
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">pagelinks_redir_clean</span> <span class="o">=</span> <span class="n">ddf</span><span class="o">.</span><span class="n">read_parquet</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">data_path</span><span class="p">,</span> <span class="s1">'processed'</span><span class="p">,</span> <span class="s1">'pagelinks_redir_clean.parquet'</span><span class="p">))</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+    
+
+<div class="cell border-box-sizing text_cell rendered">
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>As always, our S3 copy is available</p>
+
+</div>
+</div>
+</div>
+    
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">pagelinks_redir_clean</span> <span class="o">=</span> <span class="n">ddf</span><span class="o">.</span><span class="n">read_parquet</span><span class="p">(</span><span class="s1">'s3://lts2-wikipedia/enwiki/20201120/pagelinks_redir_clean.parquet'</span><span class="p">,</span> <span class="n">storage_options</span><span class="o">=</span><span class="n">storage_options</span><span class="p">)</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+    
+
+    
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">pagelinks_redir_clean</span><span class="o">.</span><span class="n">count</span><span class="p">()</span><span class="o">.</span><span class="n">compute</span><span class="p">()</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+<div class="output_area">
+
+
+
+<div class="output_text output_subarea output_execute_result">
+<pre>from    534689528
+dest    534689528
+dtype: int64</pre>
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+    
+
+<div class="cell border-box-sizing text_cell rendered">
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>That is almost 535 millions of links.</p>
+
+</div>
+</div>
+</div>
+    
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">pagelinks_redir_nodupes</span> <span class="o">=</span> <span class="n">pagelinks_redir_clean</span><span class="o">.</span><span class="n">drop_duplicates</span><span class="p">([</span><span class="s1">'from'</span><span class="p">,</span> <span class="s1">'dest'</span><span class="p">])</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+    
+
+<div class="cell border-box-sizing text_cell rendered">
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>Trying to run the code below might trigger out-of-memory errors and finally the process will fail if your workers do not have more than <strong>55GB to 60GB</strong> memory available ! You have been warned :)  ! A <code>repartition</code> call has been added to avoid ending up with a single file.</p>
+
+</div>
+</div>
+</div>
+    
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">pagelinks_redir_nodupes</span><span class="o">.</span><span class="n">repartition</span><span class="p">(</span><span class="n">npartitions</span><span class="o">=</span><span class="mi">50</span><span class="p">)</span>\
+                       <span class="o">.</span><span class="n">to_parquet</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">data_path</span><span class="p">,</span> <span class="s1">'processed'</span><span class="p">,</span> <span class="s1">'pagelinks_redir_nodupes.parquet'</span><span class="p">),</span> <span class="n">compression</span><span class="o">=</span><span class="s1">'gzip'</span><span class="p">)</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+    
+
+<div class="cell border-box-sizing text_cell rendered">
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>Play it safe, reload from disk ...</p>
+
+</div>
+</div>
+</div>
+    
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">pagelinks_redir_nodupes</span> <span class="o">=</span> <span class="n">ddf</span><span class="o">.</span><span class="n">read_parquet</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">data_path</span><span class="p">,</span> <span class="s1">'processed'</span><span class="p">,</span> <span class="s1">'pagelinks_redir_nodupes.parquet'</span><span class="p">),</span> <span class="n">engine</span><span class="o">=</span><span class="s1">'pyarrow'</span><span class="p">)</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+    
+
+<div class="cell border-box-sizing text_cell rendered">
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>... or from S3</p>
+
+</div>
+</div>
+</div>
+    
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">pagelinks_redir_nodupes</span> <span class="o">=</span> <span class="n">ddf</span><span class="o">.</span><span class="n">read_parquet</span><span class="p">(</span><span class="s1">'s3://lts2-wikipedia/enwiki/20201120/pagelinks_redir_nodupes.parquet'</span><span class="p">,</span> <span class="n">storage_options</span><span class="o">=</span><span class="n">storage_options</span><span class="p">)</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+    
+
+    
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">pagelinks_redir_nodupes</span><span class="o">.</span><span class="n">count</span><span class="p">()</span><span class="o">.</span><span class="n">compute</span><span class="p">()</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+<div class="output_area">
+
+
+
+<div class="output_text output_subarea output_execute_result">
+<pre>from    522219227
+dest    522219227
+dtype: int64</pre>
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+    
+
+<div class="cell border-box-sizing text_cell rendered">
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>There was about 15 millions duplicate links removed. Quite worth the computing time</p>
+
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h1 id="Conclusions">
+<a class="anchor" href="#Conclusions" aria-hidden="true"><span class="octicon octicon-link"></span></a>Conclusions<a class="anchor-link" href="#Conclusions"> </a>
+</h1>
+<p>Dask is a great tool to exploit parallelism of your local computer, without the hassle of setting up Spark. All you have to do is create a conda environment, install dask and you are mostly done. However, while writing this, I compared with a <a href="https://github.com/cluster-apps-on-docker/spark-standalone-cluster-on-docker">dockerized spark instance</a>, running the sparkwiki processing rewritten for pyspark (each worker was allocated 20GB of RAM and 10 cores). It seems that, for now, spark is more efficient. The redirection processing took only a few minutes and at least twice longer using the dask equivalents and no memory trouble was seen, whereas the duplicates removal required a much bigger amount of memory per worker.</p>
+<p>Let us compare our results with the pyspark-processed version:</p>
+
+</div>
+</div>
+</div>
+    
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">pagelinks_pyspark</span> <span class="o">=</span> <span class="n">ddf</span><span class="o">.</span><span class="n">read_parquet</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">data_path</span><span class="p">,</span> <span class="s1">'processed'</span><span class="p">,</span> <span class="s1">'pagelinks_ps_clean.parquet'</span><span class="p">),</span> <span class="n">engine</span><span class="o">=</span><span class="s1">'pyarrow'</span><span class="p">)</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+    
+
+    
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">pagelinks_pyspark</span><span class="o">.</span><span class="n">count</span><span class="p">()</span><span class="o">.</span><span class="n">compute</span><span class="p">()</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+<div class="output_area">
+
+
+
+<div class="output_text output_subarea output_execute_result">
+<pre>from    522219227
+dest    522219227
+dtype: int64</pre>
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+    
+
+<div class="cell border-box-sizing text_cell rendered">
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>Good news, same amount of data in the pyspark version ! Looks like we managed to process in a similar way.</p>
+
+</div>
+</div>
+</div>
+    
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">links_ps</span> <span class="o">=</span> <span class="n">pagelinks_pyspark</span><span class="p">[</span><span class="n">pagelinks_pyspark</span><span class="p">[</span><span class="s1">'dest'</span><span class="p">]</span><span class="o">==</span><span class="mi">1677</span><span class="p">]</span><span class="o">.</span><span class="n">compute</span><span class="p">()</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+    
+
+    
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">links_dask</span> <span class="o">=</span> <span class="n">pagelinks_redir_nodupes</span><span class="p">[</span><span class="n">pagelinks_redir_nodupes</span><span class="p">[</span><span class="s1">'dest'</span><span class="p">]</span><span class="o">==</span><span class="mi">1677</span><span class="p">]</span><span class="o">.</span><span class="n">compute</span><span class="p">()</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+    
+
+    
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">links_ps</span><span class="o">.</span><span class="n">sort_values</span><span class="p">(</span><span class="s1">'from'</span><span class="p">)</span><span class="o">.</span><span class="n">head</span><span class="p">()</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+<div class="output_area">
+
+
+<div class="output_html rendered_html output_subarea output_execute_result">
+<div>
+<style scoped="">
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>from</th>
+      <th>dest</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>764</th>
+      <td>736</td>
+      <td>1677</td>
+    </tr>
+    <tr>
+      <th>743</th>
+      <td>1676</td>
+      <td>1677</td>
+    </tr>
+    <tr>
+      <th>2063</th>
+      <td>1688</td>
+      <td>1677</td>
+    </tr>
+    <tr>
+      <th>1167</th>
+      <td>1689</td>
+      <td>1677</td>
+    </tr>
+    <tr>
+      <th>363</th>
+      <td>1862</td>
+      <td>1677</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+    
+
+    
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">delta</span> <span class="o">=</span> <span class="p">(</span><span class="n">links_dask</span><span class="o">.</span><span class="n">sort_values</span><span class="p">(</span><span class="s1">'from'</span><span class="p">)</span><span class="o">.</span><span class="n">reset_index</span><span class="p">()[</span><span class="s1">'from'</span><span class="p">]</span><span class="o">-</span><span class="n">links_ps</span><span class="o">.</span><span class="n">sort_values</span><span class="p">(</span><span class="s1">'from'</span><span class="p">)</span><span class="o">.</span><span class="n">reset_index</span><span class="p">()[</span><span class="s1">'from'</span><span class="p">])</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+    
+
+    
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">delta</span><span class="o">.</span><span class="n">min</span><span class="p">()</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+<div class="output_area">
+
+
+
+<div class="output_text output_subarea output_execute_result">
+<pre>0</pre>
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+    
+
+    
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">delta</span><span class="o">.</span><span class="n">max</span><span class="p">()</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+<div class="output_area">
+
+
+
+<div class="output_text output_subarea output_execute_result">
+<pre>0</pre>
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+    
+
+</div>
+
+
+
+  </div><a class="u-url" href="/random-thoughts-reboot/wikipedia/dask/2020/12/04/daskwiki-part2.html" hidden></a>
+</article>
+
+      </div>
+    </main><footer class="site-footer h-card">
+  <data class="u-url" href="/random-thoughts-reboot/"></data>
+
+  <div class="wrapper">
+
+    <div class="footer-col-wrapper">
+      <div class="footer-col">
+        <p class="feed-subscribe">
+          <a href="/random-thoughts-reboot/feed.xml">
+            <svg class="svg-icon orange">
+              <use xlink:href="/random-thoughts-reboot/assets/minima-social-icons.svg#rss"></use>
+            </svg><span>Subscribe</span>
+          </a>
+        </p>
+      </div>
+      <div class="footer-col">
+        <p>An easy to use blogging platform with support for Jupyter Notebooks.</p>
+      </div>
+    </div>
+
+    <div class="social-links"><ul class="social-media-list"><li><a rel="me" href="https://github.com/fastai" target="_blank" title="fastai"><svg class="svg-icon grey"><use xlink:href="/random-thoughts-reboot/assets/minima-social-icons.svg#github"></use></svg></a></li><li><a rel="me" href="https://twitter.com/fastdotai" target="_blank" title="fastdotai"><svg class="svg-icon grey"><use xlink:href="/random-thoughts-reboot/assets/minima-social-icons.svg#twitter"></use></svg></a></li></ul>
+</div>
+
+  </div>
+
+</footer>
+</body>
+
+</html>

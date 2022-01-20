@@ -1,0 +1,1524 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="twitter:card" content="summary_large_image" /><!-- Begin Jekyll SEO tag v2.7.1 -->
+<title>Pre-processing wikipedia dumps with dask (part 1) | fastpages</title>
+<meta name="generator" content="Jekyll v4.1.1" />
+<meta property="og:title" content="Pre-processing wikipedia dumps with dask (part 1)" />
+<meta name="author" content="Nicolas Aspert" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="Wikipedia SQL dumps are a great data source, of manageable size (when compared to the full dumps). However, processing them efficiently can be challenging. Take advantage of the (hopefully) many CPU cores available to process them. Part 1 shows how to convert the SQL dumps into dataframes and save them as parquet files." />
+<meta property="og:description" content="Wikipedia SQL dumps are a great data source, of manageable size (when compared to the full dumps). However, processing them efficiently can be challenging. Take advantage of the (hopefully) many CPU cores available to process them. Part 1 shows how to convert the SQL dumps into dataframes and save them as parquet files." />
+<link rel="canonical" href="https://naspert.github.io/random-thoughts-reboot/wikipedia/dask/2020/12/02/daskwiki.html" />
+<meta property="og:url" content="https://naspert.github.io/random-thoughts-reboot/wikipedia/dask/2020/12/02/daskwiki.html" />
+<meta property="og:site_name" content="fastpages" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2020-12-02T00:00:00-06:00" />
+<meta name="twitter:card" content="summary" />
+<meta property="twitter:title" content="Pre-processing wikipedia dumps with dask (part 1)" />
+<script type="application/ld+json">
+{"url":"https://naspert.github.io/random-thoughts-reboot/wikipedia/dask/2020/12/02/daskwiki.html","@type":"BlogPosting","headline":"Pre-processing wikipedia dumps with dask (part 1)","dateModified":"2020-12-02T00:00:00-06:00","datePublished":"2020-12-02T00:00:00-06:00","mainEntityOfPage":{"@type":"WebPage","@id":"https://naspert.github.io/random-thoughts-reboot/wikipedia/dask/2020/12/02/daskwiki.html"},"author":{"@type":"Person","name":"Nicolas Aspert"},"description":"Wikipedia SQL dumps are a great data source, of manageable size (when compared to the full dumps). However, processing them efficiently can be challenging. Take advantage of the (hopefully) many CPU cores available to process them. Part 1 shows how to convert the SQL dumps into dataframes and save them as parquet files.","@context":"https://schema.org"}</script>
+<!-- End Jekyll SEO tag -->
+<link rel="stylesheet" href="/random-thoughts-reboot/assets/css/style.css"><link type="application/atom+xml" rel="alternate" href="https://naspert.github.io/random-thoughts-reboot/feed.xml" title="fastpages" /><link rel="shortcut icon" type="image/x-icon" href="/random-thoughts-reboot/images/favicon.ico"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/Primer/15.2.0/primer.css" integrity="sha512-xTz2ys4coGAOz8vuV1NcQBkgVmKhsSEtjbqyMJbBHRplFuvKIUo6xhLHpAyPt9mfR6twHJgn9OgVLuqOvjeBhg==" crossorigin="anonymous" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.14.0/css/all.min.css" integrity="sha512-1PKOgIY59xJ8Co8+NE6FZ+LOAZKjy+KY8iq0G4B3CyeY6wYHN3yt9PW0XpSriVlkMXe40PTKnXrLnZ9+fkDaog==" crossorigin="anonymous" />
+
+<script>
+function wrap_img(fn) {
+    if (document.attachEvent ? document.readyState === "complete" : document.readyState !== "loading") {
+        var elements = document.querySelectorAll(".post img");
+        Array.prototype.forEach.call(elements, function(el, i) {
+            if (el.getAttribute("title") && (el.className != "emoji")) {
+                const caption = document.createElement('figcaption');
+                var node = document.createTextNode(el.getAttribute("title"));
+                caption.appendChild(node);
+                const wrapper = document.createElement('figure');
+                wrapper.className = 'image';
+                el.parentNode.insertBefore(wrapper, el);
+                el.parentNode.removeChild(el);
+                wrapper.appendChild(el);
+                wrapper.appendChild(caption);
+            }
+        });
+    } else { document.addEventListener('DOMContentLoaded', fn); }
+}
+window.onload = wrap_img;
+</script>
+
+<script>
+    document.addEventListener("DOMContentLoaded", function(){
+    // add link icon to anchor tags
+    var elem = document.querySelectorAll(".anchor-link")
+    elem.forEach(e => (e.innerHTML = '<i class="fas fa-link fa-xs"></i>'));
+    });
+</script>
+</head>
+<body><header class="site-header">
+
+  <div class="wrapper"><a class="site-title" rel="author" href="/random-thoughts-reboot/">fastpages</a><nav class="site-nav">
+        <input type="checkbox" id="nav-trigger" class="nav-trigger" />
+        <label for="nav-trigger">
+          <span class="menu-icon">
+            <svg viewBox="0 0 18 15" width="18px" height="15px">
+              <path d="M18,1.484c0,0.82-0.665,1.484-1.484,1.484H1.484C0.665,2.969,0,2.304,0,1.484l0,0C0,0.665,0.665,0,1.484,0 h15.032C17.335,0,18,0.665,18,1.484L18,1.484z M18,7.516C18,8.335,17.335,9,16.516,9H1.484C0.665,9,0,8.335,0,7.516l0,0 c0-0.82,0.665-1.484,1.484-1.484h15.032C17.335,6.031,18,6.696,18,7.516L18,7.516z M18,13.516C18,14.335,17.335,15,16.516,15H1.484 C0.665,15,0,14.335,0,13.516l0,0c0-0.82,0.665-1.483,1.484-1.483h15.032C17.335,12.031,18,12.695,18,13.516L18,13.516z"/>
+            </svg>
+          </span>
+        </label>
+
+        <div class="trigger"><a class="page-link" href="/random-thoughts-reboot/about/">About Me</a><a class="page-link" href="/random-thoughts-reboot/search/">Search</a><a class="page-link" href="/random-thoughts-reboot/categories/">Tags</a></div>
+      </nav></div>
+</header>
+<main class="page-content" aria-label="Content">
+      <div class="wrapper">
+        <article class="post h-entry" itemscope itemtype="http://schema.org/BlogPosting">
+
+  <header class="post-header">
+    <h1 class="post-title p-name" itemprop="name headline">Pre-processing wikipedia dumps with dask (part 1)</h1><p class="page-description">Wikipedia SQL dumps are a great data source, of manageable size (when compared to the full dumps). However, processing them efficiently can be challenging. Take advantage of the (hopefully) many CPU cores available to process them. Part 1 shows how to convert the SQL dumps into dataframes and save them as parquet files.</p><p class="post-meta post-meta-title"><time class="dt-published" datetime="2020-12-02T00:00:00-06:00" itemprop="datePublished">
+        Dec 2, 2020
+      </time>• 
+          <span itemprop="author" itemscope itemtype="http://schema.org/Person">
+            <span class="p-author h-card" itemprop="name">Nicolas Aspert</span></span>
+       • <span class="read-time" title="Estimated read time">
+    
+    
+      9 min read
+    
+</span></p>
+
+    
+      <p class="category-tags"><i class="fas fa-tags category-tags-icon"></i></i> 
+      
+        <a class="category-tags-link" href="/random-thoughts-reboot/categories/#wikipedia">wikipedia</a>
+        &nbsp;
+      
+        <a class="category-tags-link" href="/random-thoughts-reboot/categories/#dask">dask</a>
+        
+      
+      </p>
+    
+
+    
+      
+        <div class="pb-5 d-flex flex-justify-center">
+          <div class="px-2">
+
+    <a href="https://github.com/naspert/random-thoughts-reboot/tree/master/_notebooks/2020-12-02-daskwiki.ipynb" role="button" target="_blank">
+<img class="notebook-badge-image" src="/random-thoughts-reboot/assets/badges/github.svg" alt="View On GitHub">
+    </a>
+</div>
+
+          <div class="px-2">
+    <a href="https://mybinder.org/v2/gh/naspert/random-thoughts-reboot/master?filepath=_notebooks%2F2020-12-02-daskwiki.ipynb" target="_blank">
+        <img class="notebook-badge-image" src="/random-thoughts-reboot/assets/badges/binder.svg" alt="Open In Binder"/>
+    </a>
+</div>
+
+          <div class="px-2">
+    <a href="https://colab.research.google.com/github/naspert/random-thoughts-reboot/blob/master/_notebooks/2020-12-02-daskwiki.ipynb" target="_blank">
+        <img class="notebook-badge-image" src="/random-thoughts-reboot/assets/badges/colab.svg" alt="Open In Colab"/>
+    </a>
+</div>
+          <div class="px-2">
+  <a href="https://deepnote.com/launch?url=https%3A%2F%2Fgithub.com%2Fnaspert%2Frandom-thoughts-reboot%2Fblob%2Fmaster%2F_notebooks%2F2020-12-02-daskwiki.ipynb" target="_blank">
+      <img class="notebook-badge-image" src="/random-thoughts-reboot/assets/badges/deepnote.svg" alt="Launch in Deepnote"/>
+  </a>
+</div>
+
+        </div>
+      </header>
+
+  <div class="post-content e-content" itemprop="articleBody">
+    <ul id="toc" class="section-nav">
+<li class="toc-entry toc-h1"><a href="#Introduction">Introduction </a>
+<ul>
+<li class="toc-entry toc-h2"><a href="#Requirements">Requirements </a></li>
+<li class="toc-entry toc-h2"><a href="#SQL-dumps">SQL dumps </a>
+<ul>
+<li class="toc-entry toc-h3"><a href="#Files-needed">Files needed </a></li>
+<li class="toc-entry toc-h3"><a href="#Parallelism---preliminary-step">Parallelism - preliminary step </a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toc-entry toc-h1"><a href="#Processing-SQL-dumps">Processing SQL dumps </a>
+<ul>
+<li class="toc-entry toc-h2"><a href="#Imports">Imports </a></li>
+<li class="toc-entry toc-h2"><a href="#Starting-the-dask-(local)-cluster">Starting the dask (local) cluster </a></li>
+<li class="toc-entry toc-h2"><a href="#Helpers-functions">Helpers functions </a></li>
+</ul>
+</li>
+<li class="toc-entry toc-h1"><a href="#Processing-redirects">Processing redirects </a>
+<ul>
+<li class="toc-entry toc-h2"><a href="#Read-the-local-files-into-a-dask-bag">Read the local files into a dask bag </a></li>
+<li class="toc-entry toc-h2"><a href="#Alternative:-read-the-files-from-S3-bucket">Alternative: read the files from S3 bucket </a></li>
+<li class="toc-entry toc-h2"><a href="#Tansform-each-record-into-a-redirect-dictionary">Tansform each record into a redirect dictionary </a></li>
+</ul>
+</li>
+<li class="toc-entry toc-h1"><a href="#Processing-pages">Processing pages </a>
+<ul>
+<li class="toc-entry toc-h2"><a href="#Read-splits-from-local-filesystem">Read splits from local filesystem </a></li>
+<li class="toc-entry toc-h2"><a href="#Alternative:-read-from-S3-storage">Alternative: read from S3 storage </a></li>
+<li class="toc-entry toc-h2"><a href="#Filter-records-and-create-dataframe">Filter records and create dataframe </a></li>
+</ul>
+</li>
+<li class="toc-entry toc-h1"><a href="#Processing-pagelinks">Processing pagelinks </a></li>
+</ul><!--
+#################################################
+### THIS FILE WAS AUTOGENERATED! DO NOT EDIT! ###
+#################################################
+# file to edit: _notebooks/2020-12-02-daskwiki.ipynb
+-->
+
+<div class="container" id="notebook-container">
+        
+<div class="cell border-box-sizing text_cell rendered">
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h1 id="Introduction">
+<a class="anchor" href="#Introduction" aria-hidden="true"><span class="octicon octicon-link"></span></a>Introduction<a class="anchor-link" href="#Introduction"> </a>
+</h1>
+<p>In addition to being a great source of information, <a href="https://www.wikipedia.org">Wikipedia</a> is also a model in openness and access to its data. You can access the whole data from the <a href="https://dumps.wikimedia.org/">dumps page</a> and download most of the data powering Wikipedia.</p>
+<p>I will focus here on how to process the SQL dumps and transform them to be ingested by, for instance, a <a href="https://neo4j.com">Neo4j graph database</a>. This can be done by other means, for instance using the <a href="https://github.com/epfl-lts2/sparkwiki">sparkwiki</a> tool (disclaimer: mostly written by me). Sparkwiki is great, however it requires a <a href="https://spark.apache.org/">spark</a> instance/cluster to work, which is not always easy to set up, even with <a href="https://blog.miz.space/tutorial/2019/04/04/how-to-install-spark-using-apache-bigtop-ubuntu/">Bigtop</a> or <a href="https://elasticluster.readthedocs.io/en/latest/playbooks.html#hadoop-spark">elasticluster</a>. Nowadays, the research world runs a lot of Python, and <a href="https://dask.org">dask</a> seems (claims ?) to be the Python-based Spark equivalent, so making an equivalent of sparkwiki in python is a good excuse to see if dask is fit for the job.</p>
+<h2 id="Requirements">
+<a class="anchor" href="#Requirements" aria-hidden="true"><span class="octicon octicon-link"></span></a>Requirements<a class="anchor-link" href="#Requirements"> </a>
+</h2>
+<p>In order to run the experiments below, you need</p>
+<ul>
+<li>a good internet connection (the dumps amount for ca. 8 GB of data you need to download)</li>
+<li>a computer with a decent amount of RAM and CPUs (I ran them on a 2x20-cores system with 128 GB of RAM, but never used it fully) or a suitable cluster if you have one at hand, and preferrably SSD local storage. I will asssume a Linux-based OS, though it should work on MacOS or even Windows.</li>
+<li>a suitable conda/pip environment with the necessary packages installed (TODO)</li>
+</ul>
+<h2 id="SQL-dumps">
+<a class="anchor" href="#SQL-dumps" aria-hidden="true"><span class="octicon octicon-link"></span></a>SQL dumps<a class="anchor-link" href="#SQL-dumps"> </a>
+</h2>
+<p>In this example, I will show how to process the english wikipedia database dump, the adaptation to other languages should be fairly straightforward. You can find the index of all dumps on <a href="https://dumps.wikimedia.org/backup-index.html">this page</a>, the english language SQL dumps are in the <a href="https://dumps.wikimedia.org/enwiki/">enwiki subfolder</a>. In order to achieve speedy downloads, you can use of the <a href="https://dumps.wikimedia.org/mirrors.html">mirrors close to you</a> (I am in Switzerland, the mirror from Umeå university is the fastest one for me, YMMV). The latest backup available (when I wrote this) is from Nov. 20th 2020, I will be using this one in my examples.</p>
+<h3 id="Files-needed">
+<a class="anchor" href="#Files-needed" aria-hidden="true"><span class="octicon octicon-link"></span></a>Files needed<a class="anchor-link" href="#Files-needed"> </a>
+</h3>
+<p>You will need 3 files :</p>
+<ul>
+<li>
+<a href="https://dumps.wikimedia.org/enwiki/20201120/enwiki-20201120-page.sql.gz">enwiki-20201120-page.sql.gz</a> which contains page data (title, namespace, etc.)</li>
+<li>
+<a href="https://dumps.wikimedia.org/enwiki/20201120/enwiki-20201120-pagelinks.sql.gz">enwiki-20201120-pagelinks.sql.gz</a> which contains all links between pages within the English wikipedia edition (links across languages are stored in a different table)</li>
+<li>
+<a href="https://dumps.wikimedia.org/enwiki/20201120/enwiki-20201120-redirect.sql.gz">enwiki-20201120-redirect.sql.gz</a> which contains redirection information betweem pages (e.g when a page is renamed)</li>
+</ul>
+<p>You can find more detailed information about each table on the <a href="https://www.mediawiki.org/wiki/Manual:Database_layout">database layout</a> page.</p>
+
+</div>
+</div>
+</div>
+    
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">data_path</span> <span class="o">=</span> <span class="s1">'/data/wikipedia/20201120'</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+    
+
+<div class="cell border-box-sizing text_cell rendered">
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h3 id="Parallelism---preliminary-step">
+<a class="anchor" href="#Parallelism---preliminary-step" aria-hidden="true"><span class="octicon octicon-link"></span></a>Parallelism - preliminary step<a class="anchor-link" href="#Parallelism---preliminary-step"> </a>
+</h3>
+<p>Sparkwiki was able to process the compressed dumps in parallel after converting them to bz2 archives. After experimenting with dask, it turns out this simple step is not sufficient to achieve parallelism. However, dask supports <a href="https://docs.dask.org/en/latest/bag-api.html#dask.bag.read_text">reading multiple files in parallel</a>, so an extra step is needed to convert the single-file SQL dump into multiple files. Those files can be used to re-create the database powering Wikipedia, and is just a big text file containing <code>INSERT</code> statements (quite a lot of them actually).</p>
+<p>The handy Linux command <code>split</code> allows cutting the files into smaller chunks, without breaking SQL statements which need to be parsed later on:</p>
+
+<pre><code>zcat enwiki-20201101-redirect.sql.gz | split -l 100 --filter 'bzip2 &gt; $FILE.bz2' - split-redirect-</code></pre>
+<p>This command will cut the redirect SQL dump into 100-lines bzip2-compressed (thanks to the <code>filter</code> parameter) chunks with a <code>split-redirect-</code> prefix. Check the <a href="https://man7.org/linux/man-pages/man1/split.1.html">man page</a> of the command for more details.</p>
+<p>We can now split the two other files. The number of lines in each chunk is hand-adjusted to have a good compromise between number of files and file size :</p>
+
+<pre><code>zcat enwiki-20201101-page.sql.gz | split -l 150 --filter 'bzip2 &gt; $FILE.bz2' - split-page-
+zcat enwiki-20201101-pagelinks.sql.gz | split -l 400 --filter 'bzip2 &gt; $FILE.bz2' - split-pagelinks-</code></pre>
+<p><strong>This can take a few hours</strong> (esp. the splitting of the pagelinks file), so if you want to skip this part you can use the splits I uploaded on our S3-compatible storage hosted on SwitchEngines.</p>
+
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h1 id="Processing-SQL-dumps">
+<a class="anchor" href="#Processing-SQL-dumps" aria-hidden="true"><span class="octicon octicon-link"></span></a>Processing SQL dumps<a class="anchor-link" href="#Processing-SQL-dumps"> </a>
+</h1>
+<p>We are now ready to actually perform the processing.</p>
+<h2 id="Imports">
+<a class="anchor" href="#Imports" aria-hidden="true"><span class="octicon octicon-link"></span></a>Imports<a class="anchor-link" href="#Imports"> </a>
+</h2>
+</div>
+</div>
+</div>
+    
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
+<span class="kn">import</span> <span class="nn">dask</span>
+<span class="kn">import</span> <span class="nn">dask.bag</span> <span class="k">as</span> <span class="nn">db</span>
+<span class="kn">import</span> <span class="nn">dask.dataframe</span> <span class="k">as</span> <span class="nn">ddf</span>
+<span class="kn">import</span> <span class="nn">re</span>
+<span class="kn">import</span> <span class="nn">os</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+    
+
+<div class="cell border-box-sizing text_cell rendered">
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="Starting-the-dask-(local)-cluster">
+<a class="anchor" href="#Starting-the-dask-(local)-cluster" aria-hidden="true"><span class="octicon octicon-link"></span></a>Starting the dask (local) cluster<a class="anchor-link" href="#Starting-the-dask-(local)-cluster"> </a>
+</h2>
+<p>Before running commands, we need to set up a few things for processing. NB: This is NOT the only way to do it, you can read about setting up the scheduler on a <a href="https://docs.dask.org/en/latest/setup/single-distributed.html">single machine</a>, or on <a href="https://docs.dask.org/en/latest/setup.html">other types of environments</a> such as clouds, Kubernetes, etc.
+One important thing to set up when running on a single computer is to have a <strong>local temporary directory</strong>: at some point when processing, dask will write data to disk. It is fairly common to have NFS-mounted directories for instance, and it is crucial for good performance to make sure data does not need to go through a network.</p>
+
+</div>
+</div>
+</div>
+    
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">dask</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">set</span><span class="p">({</span><span class="s1">'temporary_directory'</span><span class="p">:</span> <span class="s1">'/tmp'</span><span class="p">})</span> <span class="c1"># make sure temp dir is local and has sufficient space. Adjust to your resources/needs !</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+    
+
+    
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="kn">from</span> <span class="nn">dask.distributed</span> <span class="kn">import</span> <span class="n">LocalCluster</span><span class="p">,</span> <span class="n">Client</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+    
+
+<div class="cell border-box-sizing text_cell rendered">
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>We can now start our local cluster. This will work for me, make sure you adapt to your local resources ! It is important to keep $\text{n_workers} \times \text{memory_limit}$ under the physical memory available (or a lower value if the computer is shared with other users and you want to be nice to others).</p>
+
+</div>
+</div>
+</div>
+    
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">cluster</span> <span class="o">=</span> <span class="n">LocalCluster</span><span class="p">(</span><span class="n">n_workers</span><span class="o">=</span><span class="mi">6</span><span class="p">,</span> <span class="n">threads_per_worker</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">memory_limit</span><span class="o">=</span><span class="mf">24e9</span><span class="p">)</span>
+<span class="n">client</span> <span class="o">=</span> <span class="n">Client</span><span class="p">(</span><span class="n">cluster</span><span class="p">)</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+    
+
+<div class="cell border-box-sizing text_cell rendered">
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="Helpers-functions">
+<a class="anchor" href="#Helpers-functions" aria-hidden="true"><span class="octicon octicon-link"></span></a>Helpers functions<a class="anchor-link" href="#Helpers-functions"> </a>
+</h2>
+<p>Let us now set up a few routines and regexps (check <a href="https://github.com/epfl-lts2/sparkwiki">sparkwiki</a> for details)</p>
+
+</div>
+</div>
+</div>
+    
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">re_dict</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"page"</span><span class="p">:</span> <span class="s2">"\((\d+),(\d+),'(.*?)','(.*?)',([01]),([01]),([\d\.]+?),'(\d</span><span class="si">{14}</span><span class="s2">)',(.*?),(\d+),(\d+),(.*?),(.*?)\)"</span><span class="p">,</span>
+          <span class="s2">"redirect"</span><span class="p">:</span><span class="s2">"\((\d+),(\d+),'(.*?)',(.*?),(.*?)\)"</span><span class="p">,</span>
+          <span class="s2">"pagelinks"</span><span class="p">:</span><span class="s2">"\((\d+),(\d+),'(.*?)',(\d+)\)"</span><span class="p">}</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+    
+
+    
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="k">def</span> <span class="nf">filter_line</span><span class="p">(</span><span class="n">line</span><span class="p">,</span> <span class="n">dump_type</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">line</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s1">'INSERT INTO `</span><span class="si">{}</span><span class="s1">` VALUES'</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">dump_type</span><span class="p">))</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+    
+
+    
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="k">def</span> <span class="nf">split_line</span><span class="p">(</span><span class="n">line</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">line</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">" VALUES "</span><span class="p">)[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+    
+
+    
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="k">def</span> <span class="nf">get_redirect</span><span class="p">(</span><span class="n">rec</span><span class="p">):</span>
+    <span class="k">return</span> <span class="p">{</span><span class="s1">'from'</span><span class="p">:</span><span class="nb">int</span><span class="p">(</span><span class="n">rec</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span> <span class="s1">'target_ns'</span><span class="p">:</span><span class="nb">int</span><span class="p">(</span><span class="n">rec</span><span class="p">[</span><span class="mi">1</span><span class="p">]),</span> <span class="s1">'title'</span><span class="p">:</span><span class="n">rec</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="s1">'inter_wiki'</span><span class="p">:</span><span class="n">rec</span><span class="p">[</span><span class="mi">3</span><span class="p">],</span> <span class="s1">'fragment'</span><span class="p">:</span><span class="n">rec</span><span class="p">[</span><span class="mi">4</span><span class="p">]}</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+    
+
+    
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="k">def</span> <span class="nf">get_page</span><span class="p">(</span><span class="n">rec</span><span class="p">):</span>
+    <span class="c1"># case class WikipediaSimplePage(id:Int, title:String, isRedirect:Boolean, isNew: Boolean)</span>
+    <span class="k">return</span> <span class="p">{</span><span class="s1">'id'</span><span class="p">:</span> <span class="nb">int</span><span class="p">(</span><span class="n">rec</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span> <span class="s1">'namespace'</span><span class="p">:</span><span class="nb">int</span><span class="p">(</span><span class="n">rec</span><span class="p">[</span><span class="mi">1</span><span class="p">]),</span> <span class="s1">'title'</span><span class="p">:</span> <span class="n">rec</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="s1">'is_redirect'</span><span class="p">:</span><span class="nb">int</span><span class="p">(</span><span class="n">rec</span><span class="p">[</span><span class="mi">4</span><span class="p">])</span><span class="o">==</span><span class="mi">1</span><span class="p">,</span> <span class="s1">'is_new'</span><span class="p">:</span><span class="nb">int</span><span class="p">(</span><span class="n">rec</span><span class="p">[</span><span class="mi">5</span><span class="p">])</span><span class="o">==</span><span class="mi">1</span><span class="p">}</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+    
+
+    
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="k">def</span> <span class="nf">get_pagelinks</span><span class="p">(</span><span class="n">rec</span><span class="p">):</span>
+    <span class="c1"># case class WikipediaPagelinks(from:Int, namespace:Int, title:String, fromNamespace:Int)</span>
+    <span class="k">return</span> <span class="p">{</span><span class="s1">'from'</span><span class="p">:</span> <span class="nb">int</span><span class="p">(</span><span class="n">rec</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span> <span class="s1">'namespace'</span><span class="p">:</span><span class="nb">int</span><span class="p">(</span><span class="n">rec</span><span class="p">[</span><span class="mi">1</span><span class="p">]),</span> <span class="s1">'title'</span><span class="p">:</span><span class="n">rec</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="s1">'from_namespace'</span><span class="p">:</span><span class="nb">int</span><span class="p">(</span><span class="n">rec</span><span class="p">[</span><span class="mi">3</span><span class="p">])}</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+    
+
+<div class="cell border-box-sizing text_cell rendered">
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h1 id="Processing-redirects">
+<a class="anchor" href="#Processing-redirects" aria-hidden="true"><span class="octicon octicon-link"></span></a>Processing redirects<a class="anchor-link" href="#Processing-redirects"> </a>
+</h1>
+<p>It may seem surprising to start with this particular table. As it is the smallest one, it is often more convenient to start and experiment processing with this one. If you make a mistake, you don't have to wait for a long time before the crash.</p>
+<h2 id="Read-the-local-files-into-a-dask-bag">
+<a class="anchor" href="#Read-the-local-files-into-a-dask-bag" aria-hidden="true"><span class="octicon octicon-link"></span></a>Read the local files into a dask bag<a class="anchor-link" href="#Read-the-local-files-into-a-dask-bag"> </a>
+</h2>
+<p>A <a href="https://docs.dask.org/en/latest/bag.html">dask bag</a> is the equivalent of a <a href="https://spark.apache.org/docs/latest/rdd-programming-guide.html#resilient-distributed-datasets-rdds">Spark RDD</a>. It supports simple operations such as <code>filter</code>, <code>map</code>, etc.</p>
+
+</div>
+</div>
+</div>
+    
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">redirects_bag</span> <span class="o">=</span> <span class="n">db</span><span class="o">.</span><span class="n">read_text</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">data_path</span><span class="p">,</span> <span class="s1">'splits/split-redirect-*.bz2'</span><span class="p">)</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+    
+
+<div class="cell border-box-sizing text_cell rendered">
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="Alternative:-read-the-files-from-S3-bucket">
+<a class="anchor" href="#Alternative:-read-the-files-from-S3-bucket" aria-hidden="true"><span class="octicon octicon-link"></span></a>Alternative: read the files from S3 bucket<a class="anchor-link" href="#Alternative:-read-the-files-from-S3-bucket"> </a>
+</h2>
+<p>It is not hosted on Amazon but on the Swiss Universities cloud <a href="https://www.switch.ch/engines/">SwitchEngines</a>, hence the custom options needed below</p>
+
+</div>
+</div>
+</div>
+    
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">storage_options</span><span class="o">=</span><span class="p">{</span><span class="s1">'anon'</span><span class="p">:</span><span class="kc">True</span><span class="p">,</span> <span class="s1">'client_kwargs'</span><span class="p">:{</span><span class="s1">'endpoint_url'</span><span class="p">:</span><span class="s1">'https://os.unil.cloud.switch.ch'</span><span class="p">}}</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+    
+
+    
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">redirects_bag</span> <span class="o">=</span> <span class="n">db</span><span class="o">.</span><span class="n">read_text</span><span class="p">(</span><span class="s1">'s3://lts2-wikipedia/enwiki/20201120/splits/split-redirect-*.bz2'</span><span class="p">,</span> <span class="n">storage_options</span><span class="o">=</span><span class="n">storage_options</span><span class="p">)</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+    
+
+<div class="cell border-box-sizing text_cell rendered">
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="Tansform-each-record-into-a-redirect-dictionary">
+<a class="anchor" href="#Tansform-each-record-into-a-redirect-dictionary" aria-hidden="true"><span class="octicon octicon-link"></span></a>Tansform each record into a redirect dictionary<a class="anchor-link" href="#Tansform-each-record-into-a-redirect-dictionary"> </a>
+</h2>
+<p>We can chain conveniently the operators to</p>
+<ul>
+<li>filter out non INSERT statements using <code>filter_line</code>
+</li>
+<li>split all VALUES from the INSERT using <code>split_line</code> and the appropriate regexp</li>
+<li>convert to a dictionary using <code>get_redirect</code>
+</li>
+</ul>
+<p>Sparkwiki does the same operations, check the <a href="https://github.com/epfl-lts2/sparkwiki/blob/master/src/main/scala/ch/epfl/lts2/wikipedia/WikipediaElementParser.scala">WikipediaElementParser.scala</a> file for more details.</p>
+
+</div>
+</div>
+</div>
+    
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">redirects</span> <span class="o">=</span> <span class="n">redirects_bag</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">filter_line</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="s1">'redirect'</span><span class="p">))</span>\
+                         <span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="n">split_line</span><span class="p">)</span>\
+                         <span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span><span class="n">re</span><span class="o">.</span><span class="n">findall</span><span class="p">(</span><span class="n">re_dict</span><span class="p">[</span><span class="s1">'redirect'</span><span class="p">],</span> <span class="n">x</span><span class="p">))</span><span class="o">.</span><span class="n">flatten</span><span class="p">()</span>\
+                         <span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="n">get_redirect</span><span class="p">)</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+    
+
+<div class="cell border-box-sizing text_cell rendered">
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>Finally, the collection of small redirect dictionaries is converted to a dask DataFrame (similar to a pandas DataFrame)</p>
+
+</div>
+</div>
+</div>
+    
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">redirects_df</span> <span class="o">=</span> <span class="n">redirects</span><span class="o">.</span><span class="n">to_dataframe</span><span class="p">()</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+    
+
+<div class="cell border-box-sizing text_cell rendered">
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>Filter out all redirects that do not concern namespace 0 (= articles), cf. <a href="https://en.wikipedia.org/wiki/Wikipedia:Namespace">Wikipedia namespaces</a></p>
+
+</div>
+</div>
+</div>
+    
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">redirects_df_filt</span> <span class="o">=</span> <span class="n">redirects_df</span><span class="p">[</span><span class="n">redirects_df</span><span class="p">[</span><span class="s1">'target_ns'</span><span class="p">]</span><span class="o">==</span><span class="mi">0</span><span class="p">]</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+    
+
+<div class="cell border-box-sizing text_cell rendered">
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>At this point, nothing is computed yet. Setting the index and saving the resulting DataFrame to a parquet file will trigger all computations. You can monitor what is happening under the hood by opening a connection to the <a href="https://distributed.dask.org/en/1.9.5/web.html">dask scheduler web interface</a> which should run on port 8787. It takes less than a minute on the system I have at hand.</p>
+
+</div>
+</div>
+</div>
+    
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">redirects_df_filt</span><span class="o">.</span><span class="n">set_index</span><span class="p">(</span><span class="s1">'from'</span><span class="p">)</span><span class="o">.</span><span class="n">to_parquet</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">data_path</span><span class="p">,</span> <span class="s1">'processed'</span><span class="p">,</span> <span class="s1">'redirect.parquet'</span><span class="p">),</span> <span class="n">compression</span><span class="o">=</span><span class="s1">'gzip'</span><span class="p">,</span> <span class="n">engine</span><span class="o">=</span><span class="s1">'fastparquet'</span><span class="p">)</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+    
+
+<div class="cell border-box-sizing text_cell rendered">
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>You can call the usual pandas DataFrame methos such as <code>head</code>, <code>tail</code>etc. However, calling them directly on <code>redirects_df_filt</code>will trigger a computation. If you want to avoid this, you can reload it from disk :</p>
+
+</div>
+</div>
+</div>
+    
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">redirects_df_reloaded</span> <span class="o">=</span> <span class="n">ddf</span><span class="o">.</span><span class="n">read_parquet</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">data_path</span><span class="p">,</span> <span class="s1">'processed'</span><span class="p">,</span> <span class="s1">'redirect.parquet'</span><span class="p">))</span>
+<span class="n">redirects_df_reloaded</span><span class="o">.</span><span class="n">head</span><span class="p">()</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+<div class="output_area">
+
+
+<div class="output_html rendered_html output_subarea output_execute_result">
+<div>
+<style scoped="">
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>target_ns</th>
+      <th>title</th>
+      <th>inter_wiki</th>
+      <th>fragment</th>
+    </tr>
+    <tr>
+      <th>from</th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>10</th>
+      <td>0</td>
+      <td>Computer_accessibility</td>
+      <td>''</td>
+      <td>''</td>
+    </tr>
+    <tr>
+      <th>13</th>
+      <td>0</td>
+      <td>History_of_Afghanistan</td>
+      <td>''</td>
+      <td>''</td>
+    </tr>
+    <tr>
+      <th>14</th>
+      <td>0</td>
+      <td>Geography_of_Afghanistan</td>
+      <td>''</td>
+      <td>''</td>
+    </tr>
+    <tr>
+      <th>15</th>
+      <td>0</td>
+      <td>Demographics_of_Afghanistan</td>
+      <td>''</td>
+      <td>''</td>
+    </tr>
+    <tr>
+      <th>18</th>
+      <td>0</td>
+      <td>Communications_in_Afghanistan</td>
+      <td>''</td>
+      <td>''</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+    
+
+<div class="cell border-box-sizing text_cell rendered">
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h1 id="Processing-pages">
+<a class="anchor" href="#Processing-pages" aria-hidden="true"><span class="octicon octicon-link"></span></a>Processing pages<a class="anchor-link" href="#Processing-pages"> </a>
+</h1>
+<p>Almost identical to redirects, takes longer though</p>
+<h2 id="Read-splits-from-local-filesystem">
+<a class="anchor" href="#Read-splits-from-local-filesystem" aria-hidden="true"><span class="octicon octicon-link"></span></a>Read splits from local filesystem<a class="anchor-link" href="#Read-splits-from-local-filesystem"> </a>
+</h2>
+</div>
+</div>
+</div>
+    
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">pages_bag</span> <span class="o">=</span> <span class="n">db</span><span class="o">.</span><span class="n">read_text</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">data_path</span><span class="p">,</span> <span class="s1">'splits/split-page-*.bz2'</span><span class="p">)</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+    
+
+<div class="cell border-box-sizing text_cell rendered">
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="Alternative:-read-from-S3-storage">
+<a class="anchor" href="#Alternative:-read-from-S3-storage" aria-hidden="true"><span class="octicon octicon-link"></span></a>Alternative: read from S3 storage<a class="anchor-link" href="#Alternative:-read-from-S3-storage"> </a>
+</h2>
+</div>
+</div>
+</div>
+    
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">pages_bag</span> <span class="o">=</span> <span class="n">db</span><span class="o">.</span><span class="n">read_text</span><span class="p">(</span><span class="s1">'s3://lts2-wikipedia/enwiki/20201120/splits/split-page-*.bz2'</span><span class="p">,</span> <span class="n">storage_options</span><span class="o">=</span><span class="n">storage_options</span><span class="p">)</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+    
+
+<div class="cell border-box-sizing text_cell rendered">
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="Filter-records-and-create-dataframe">
+<a class="anchor" href="#Filter-records-and-create-dataframe" aria-hidden="true"><span class="octicon octicon-link"></span></a>Filter records and create dataframe<a class="anchor-link" href="#Filter-records-and-create-dataframe"> </a>
+</h2>
+</div>
+</div>
+</div>
+    
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">pages</span> <span class="o">=</span> <span class="n">pages_bag</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">filter_line</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="s1">'page'</span><span class="p">))</span>\
+                 <span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="n">split_line</span><span class="p">)</span>\
+                 <span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span><span class="n">re</span><span class="o">.</span><span class="n">findall</span><span class="p">(</span><span class="n">re_dict</span><span class="p">[</span><span class="s1">'page'</span><span class="p">],</span> <span class="n">x</span><span class="p">))</span>\
+                 <span class="o">.</span><span class="n">flatten</span><span class="p">()</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="n">get_page</span><span class="p">)</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+    
+
+    
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">pages_df</span> <span class="o">=</span> <span class="n">pages</span><span class="o">.</span><span class="n">to_dataframe</span><span class="p">()</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+    
+
+<div class="cell border-box-sizing text_cell rendered">
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>Keep only namespace 0 pages</p>
+
+</div>
+</div>
+</div>
+    
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">pages_filt_df</span> <span class="o">=</span> <span class="n">pages_df</span><span class="p">[</span><span class="n">pages_df</span><span class="p">[</span><span class="s1">'namespace'</span><span class="p">]</span><span class="o">==</span><span class="mi">0</span><span class="p">]</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+    
+
+<div class="cell border-box-sizing text_cell rendered">
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>Trigger computation and save result (runs for a few minutes on my system)</p>
+
+</div>
+</div>
+</div>
+    
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">pages_filt_df</span><span class="o">.</span><span class="n">set_index</span><span class="p">(</span><span class="s1">'id'</span><span class="p">)</span><span class="o">.</span><span class="n">to_parquet</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">data_path</span><span class="p">,</span> <span class="s1">'processed'</span><span class="p">,</span> <span class="s1">'pages.parquet'</span><span class="p">),</span> <span class="n">compression</span><span class="o">=</span><span class="s1">'gzip'</span><span class="p">,</span> <span class="n">engine</span><span class="o">=</span><span class="s1">'fastparquet'</span><span class="p">)</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+    
+
+<div class="cell border-box-sizing text_cell rendered">
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>Check what we now have in the dataframe :</p>
+
+</div>
+</div>
+</div>
+    
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">pages_df_reloaded</span> <span class="o">=</span> <span class="n">ddf</span><span class="o">.</span><span class="n">read_parquet</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">data_path</span><span class="p">,</span> <span class="s1">'processed'</span><span class="p">,</span> <span class="s1">'pages.parquet'</span><span class="p">))</span>
+<span class="n">pages_df_reloaded</span><span class="o">.</span><span class="n">head</span><span class="p">(</span><span class="mi">20</span><span class="p">)</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+<div class="output_area">
+
+
+<div class="output_html rendered_html output_subarea output_execute_result">
+<div>
+<style scoped="">
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>namespace</th>
+      <th>title</th>
+      <th>is_redirect</th>
+      <th>is_new</th>
+    </tr>
+    <tr>
+      <th>id</th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>10</th>
+      <td>0</td>
+      <td>AccessibleComputing</td>
+      <td>True</td>
+      <td>False</td>
+    </tr>
+    <tr>
+      <th>12</th>
+      <td>0</td>
+      <td>Anarchism</td>
+      <td>False</td>
+      <td>False</td>
+    </tr>
+    <tr>
+      <th>13</th>
+      <td>0</td>
+      <td>AfghanistanHistory</td>
+      <td>True</td>
+      <td>False</td>
+    </tr>
+    <tr>
+      <th>14</th>
+      <td>0</td>
+      <td>AfghanistanGeography</td>
+      <td>True</td>
+      <td>False</td>
+    </tr>
+    <tr>
+      <th>15</th>
+      <td>0</td>
+      <td>AfghanistanPeople</td>
+      <td>True</td>
+      <td>False</td>
+    </tr>
+    <tr>
+      <th>18</th>
+      <td>0</td>
+      <td>AfghanistanCommunications</td>
+      <td>True</td>
+      <td>False</td>
+    </tr>
+    <tr>
+      <th>19</th>
+      <td>0</td>
+      <td>AfghanistanTransportations</td>
+      <td>True</td>
+      <td>False</td>
+    </tr>
+    <tr>
+      <th>20</th>
+      <td>0</td>
+      <td>AfghanistanMilitary</td>
+      <td>True</td>
+      <td>False</td>
+    </tr>
+    <tr>
+      <th>21</th>
+      <td>0</td>
+      <td>AfghanistanTransnationalIssues</td>
+      <td>True</td>
+      <td>False</td>
+    </tr>
+    <tr>
+      <th>23</th>
+      <td>0</td>
+      <td>AssistiveTechnology</td>
+      <td>True</td>
+      <td>False</td>
+    </tr>
+    <tr>
+      <th>24</th>
+      <td>0</td>
+      <td>AmoeboidTaxa</td>
+      <td>True</td>
+      <td>False</td>
+    </tr>
+    <tr>
+      <th>25</th>
+      <td>0</td>
+      <td>Autism</td>
+      <td>False</td>
+      <td>False</td>
+    </tr>
+    <tr>
+      <th>27</th>
+      <td>0</td>
+      <td>AlbaniaHistory</td>
+      <td>True</td>
+      <td>False</td>
+    </tr>
+    <tr>
+      <th>29</th>
+      <td>0</td>
+      <td>AlbaniaPeople</td>
+      <td>True</td>
+      <td>False</td>
+    </tr>
+    <tr>
+      <th>30</th>
+      <td>0</td>
+      <td>AsWeMayThink</td>
+      <td>True</td>
+      <td>False</td>
+    </tr>
+    <tr>
+      <th>35</th>
+      <td>0</td>
+      <td>AlbaniaGovernment</td>
+      <td>True</td>
+      <td>False</td>
+    </tr>
+    <tr>
+      <th>36</th>
+      <td>0</td>
+      <td>AlbaniaEconomy</td>
+      <td>True</td>
+      <td>False</td>
+    </tr>
+    <tr>
+      <th>39</th>
+      <td>0</td>
+      <td>Albedo</td>
+      <td>False</td>
+      <td>False</td>
+    </tr>
+    <tr>
+      <th>40</th>
+      <td>0</td>
+      <td>AfroAsiaticLanguages</td>
+      <td>True</td>
+      <td>False</td>
+    </tr>
+    <tr>
+      <th>42</th>
+      <td>0</td>
+      <td>ArtificalLanguages</td>
+      <td>True</td>
+      <td>False</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+    
+
+<div class="cell border-box-sizing text_cell rendered">
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h1 id="Processing-pagelinks">
+<a class="anchor" href="#Processing-pagelinks" aria-hidden="true"><span class="octicon octicon-link"></span></a>Processing pagelinks<a class="anchor-link" href="#Processing-pagelinks"> </a>
+</h1>
+<p>NB: this is the biggest part to process. It seems some entries can trigger utf-8 decoding errors, hence the <code>errors='backslashreplace'</code> addition whem reading.
+No index will be created to speed up computation</p>
+
+</div>
+</div>
+</div>
+    
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">pagelinks_bag</span> <span class="o">=</span> <span class="n">db</span><span class="o">.</span><span class="n">read_text</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">data_path</span><span class="p">,</span> <span class="s1">'splits/split-pagelinks-*.bz2'</span><span class="p">),</span> <span class="n">errors</span><span class="o">=</span><span class="s1">'backslashreplace'</span><span class="p">)</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+    
+
+<div class="cell border-box-sizing text_cell rendered">
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>Or S3-hosted splits :</p>
+
+</div>
+</div>
+</div>
+    
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">pageslinks_bag</span> <span class="o">=</span> <span class="n">db</span><span class="o">.</span><span class="n">read_text</span><span class="p">(</span><span class="s1">'s3://lts2-wikipedia/enwiki/20201120/splits/split-pagelinks-*.bz2'</span><span class="p">,</span> <span class="n">storage_options</span><span class="o">=</span><span class="n">storage_options</span><span class="p">,</span> <span class="n">errors</span><span class="o">=</span><span class="s1">'backslashreplace'</span><span class="p">)</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+    
+
+<div class="cell border-box-sizing text_cell rendered">
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>get pagelinks dictionaries</p>
+
+</div>
+</div>
+</div>
+    
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">pagelinks</span> <span class="o">=</span> <span class="n">pagelinks_bag</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">filter_line</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="s1">'pagelinks'</span><span class="p">))</span>\
+                         <span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="n">split_line</span><span class="p">)</span>\
+                         <span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span><span class="n">re</span><span class="o">.</span><span class="n">findall</span><span class="p">(</span><span class="n">re_dict</span><span class="p">[</span><span class="s1">'pagelinks'</span><span class="p">],</span> <span class="n">x</span><span class="p">))</span>\
+                         <span class="o">.</span><span class="n">flatten</span><span class="p">()</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="n">get_pagelinks</span><span class="p">)</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+    
+
+    
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">pagelinks_df</span> <span class="o">=</span> <span class="n">pagelinks</span><span class="o">.</span><span class="n">to_dataframe</span><span class="p">()</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+    
+
+<div class="cell border-box-sizing text_cell rendered">
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>Only keep links between articles (namespace == 0), discard all the others</p>
+
+</div>
+</div>
+</div>
+    
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">pagelinks_filt_df</span> <span class="o">=</span> <span class="n">pagelinks_df</span><span class="p">[(</span><span class="n">pagelinks_df</span><span class="p">[</span><span class="s1">'namespace'</span><span class="p">]</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">pagelinks_df</span><span class="p">[</span><span class="s1">'from_namespace'</span><span class="p">]</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)]</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+    
+
+    
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">pagelinks_filt_df</span><span class="o">.</span><span class="n">to_parquet</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">data_path</span><span class="p">,</span> <span class="s1">'processed'</span><span class="p">,</span> <span class="s1">'pagelinks.parquet'</span><span class="p">),</span> <span class="n">compression</span><span class="o">=</span><span class="s1">'gzip'</span><span class="p">,</span> <span class="n">engine</span><span class="o">=</span><span class="s1">'fastparquet'</span><span class="p">)</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+    
+
+    
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">pagelinks_reloaded</span> <span class="o">=</span> <span class="n">ddf</span><span class="o">.</span><span class="n">read_parquet</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">data_path</span><span class="p">,</span> <span class="s1">'processed'</span><span class="p">,</span> <span class="s1">'pagelinks.parquet'</span><span class="p">))</span>
+<span class="n">pagelinks_reloaded</span><span class="o">.</span><span class="n">head</span><span class="p">(</span><span class="mi">20</span><span class="p">)</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+<div class="output_area">
+
+
+<div class="output_html rendered_html output_subarea output_execute_result">
+<div>
+<style scoped="">
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>from</th>
+      <th>namespace</th>
+      <th>title</th>
+      <th>from_namespace</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>0</th>
+      <td>4748</td>
+      <td>0</td>
+      <td>!</td>
+      <td>0</td>
+    </tr>
+    <tr>
+      <th>1</th>
+      <td>9773</td>
+      <td>0</td>
+      <td>!</td>
+      <td>0</td>
+    </tr>
+    <tr>
+      <th>2</th>
+      <td>15154</td>
+      <td>0</td>
+      <td>!</td>
+      <td>0</td>
+    </tr>
+    <tr>
+      <th>3</th>
+      <td>25213</td>
+      <td>0</td>
+      <td>!</td>
+      <td>0</td>
+    </tr>
+    <tr>
+      <th>4</th>
+      <td>613303</td>
+      <td>0</td>
+      <td>!</td>
+      <td>0</td>
+    </tr>
+    <tr>
+      <th>5</th>
+      <td>1028188</td>
+      <td>0</td>
+      <td>!</td>
+      <td>0</td>
+    </tr>
+    <tr>
+      <th>6</th>
+      <td>1497620</td>
+      <td>0</td>
+      <td>!</td>
+      <td>0</td>
+    </tr>
+    <tr>
+      <th>7</th>
+      <td>2875276</td>
+      <td>0</td>
+      <td>!</td>
+      <td>0</td>
+    </tr>
+    <tr>
+      <th>8</th>
+      <td>2988645</td>
+      <td>0</td>
+      <td>!</td>
+      <td>0</td>
+    </tr>
+    <tr>
+      <th>9</th>
+      <td>4355567</td>
+      <td>0</td>
+      <td>!</td>
+      <td>0</td>
+    </tr>
+    <tr>
+      <th>10</th>
+      <td>5583438</td>
+      <td>0</td>
+      <td>!</td>
+      <td>0</td>
+    </tr>
+    <tr>
+      <th>11</th>
+      <td>7712754</td>
+      <td>0</td>
+      <td>!</td>
+      <td>0</td>
+    </tr>
+    <tr>
+      <th>12</th>
+      <td>9969569</td>
+      <td>0</td>
+      <td>!</td>
+      <td>0</td>
+    </tr>
+    <tr>
+      <th>13</th>
+      <td>11646457</td>
+      <td>0</td>
+      <td>!</td>
+      <td>0</td>
+    </tr>
+    <tr>
+      <th>14</th>
+      <td>20481393</td>
+      <td>0</td>
+      <td>!</td>
+      <td>0</td>
+    </tr>
+    <tr>
+      <th>15</th>
+      <td>21855996</td>
+      <td>0</td>
+      <td>!</td>
+      <td>0</td>
+    </tr>
+    <tr>
+      <th>16</th>
+      <td>23752827</td>
+      <td>0</td>
+      <td>!</td>
+      <td>0</td>
+    </tr>
+    <tr>
+      <th>17</th>
+      <td>33983238</td>
+      <td>0</td>
+      <td>!</td>
+      <td>0</td>
+    </tr>
+    <tr>
+      <th>18</th>
+      <td>35557493</td>
+      <td>0</td>
+      <td>!</td>
+      <td>0</td>
+    </tr>
+    <tr>
+      <th>19</th>
+      <td>35678765</td>
+      <td>0</td>
+      <td>!</td>
+      <td>0</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+    
+
+</div>
+
+
+
+  </div><a class="u-url" href="/random-thoughts-reboot/wikipedia/dask/2020/12/02/daskwiki.html" hidden></a>
+</article>
+
+      </div>
+    </main><footer class="site-footer h-card">
+  <data class="u-url" href="/random-thoughts-reboot/"></data>
+
+  <div class="wrapper">
+
+    <div class="footer-col-wrapper">
+      <div class="footer-col">
+        <p class="feed-subscribe">
+          <a href="/random-thoughts-reboot/feed.xml">
+            <svg class="svg-icon orange">
+              <use xlink:href="/random-thoughts-reboot/assets/minima-social-icons.svg#rss"></use>
+            </svg><span>Subscribe</span>
+          </a>
+        </p>
+      </div>
+      <div class="footer-col">
+        <p>An easy to use blogging platform with support for Jupyter Notebooks.</p>
+      </div>
+    </div>
+
+    <div class="social-links"><ul class="social-media-list"><li><a rel="me" href="https://github.com/fastai" target="_blank" title="fastai"><svg class="svg-icon grey"><use xlink:href="/random-thoughts-reboot/assets/minima-social-icons.svg#github"></use></svg></a></li><li><a rel="me" href="https://twitter.com/fastdotai" target="_blank" title="fastdotai"><svg class="svg-icon grey"><use xlink:href="/random-thoughts-reboot/assets/minima-social-icons.svg#twitter"></use></svg></a></li></ul>
+</div>
+
+  </div>
+
+</footer>
+</body>
+
+</html>
